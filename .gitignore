@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.next-build/
+dist/
+*.tsbuildinfo
+
+.env
+.env.local
+!.env.example
+
+# Captured Google HTML used to reproduce a parse locally. Fixtures under
+# server/test/fixtures are checked in on purpose; ad-hoc captures are not.
+scratch/
+*.log
+.DS_Store
