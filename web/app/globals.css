@@ -279,3 +279,41 @@ label.f .k { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-tran
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ── destination autocomplete ───────────────────────────────── */
+.suggest {
+  position: absolute; inset-block-start: 100%; inset-inline: 0; z-index: 30;
+  margin: 6px 0 0; padding: 5px; list-style: none;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-field); box-shadow: var(--shadow-lift);
+  max-height: 300px; overflow-y: auto;
+}
+.suggest button {
+  display: block; width: 100%; text-align: start; cursor: pointer;
+  border: 0; background: none; font: inherit; color: var(--ink);
+  padding: 8px 10px; border-radius: 8px;
+}
+.suggest button:hover, .suggest button:focus-visible { background: var(--surface-2); outline: none; }
+.suggest .s-label { display: block; font-weight: 600; font-size: 14px; }
+.suggest .s-desc { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+/* ── the hero card: photograph as the surface, prices on a plate ─── */
+.hero {
+  position: relative; overflow: hidden; color: #fff;
+  border-radius: var(--r-tile); box-shadow: var(--shadow);
+  min-height: 320px; background: var(--ink);
+  display: flex; align-items: flex-end;
+}
+.hero img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hero::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(6,15,20,.93) 0%, rgba(6,15,20,.55) 42%, rgba(6,15,20,.05) 78%);
+}
+.hero-body { position: relative; z-index: 2; padding: 22px; width: 100%; }
+.hero .place { font-family: var(--font-display), Georgia, serif; font-size: 34px; line-height: 1.1; }
+.hero .when { font-size: 13px; opacity: .85; margin-top: 5px; }
+.hero .legs { display: flex; gap: 10px; margin-top: 16px; max-width: 420px; }
+.hero .total { display: flex; align-items: baseline; gap: 9px; margin-top: 13px; padding-top: 12px;
+                border-top: 1px solid var(--plate-line); }
+.hero .total .amt { font-size: 26px; font-weight: 700; }
+.hero .total .lbl { font-size: 12.5px; opacity: .75; }

@@ -57,12 +57,15 @@ const cache = new Map<string, DestinationPhoto | null>();
 /**
  * Images that are accurate and useless on a holiday card.
  *
- * The Hebrew Wikivoyage article for רודוס leads with a locator map of Greece;
- * several islands lead with a satellite view. A card wants somewhere you would
- * want to go, so map-like files are skipped and the next candidate is tried.
- * SVG is excluded wholesale — photographs are never SVG.
+ * The Hebrew Wikivoyage article for רודוס leads with a locator map of Greece,
+ * several islands lead with a satellite view, and Barcelona and Rome lead with a
+ * four-panel montage that reads as a broken image at hero size. A card wants one
+ * photograph of somewhere you would want to go, so all of those are skipped and
+ * the next candidate is tried. SVG is excluded wholesale — photographs are never
+ * SVG.
  */
-const NOT_A_PHOTO = /\.svg$|map|locator|location|flag|coat[_ ]of[_ ]arms|sentinel|satellite|topograph|מפה/i;
+const NOT_A_PHOTO =
+  /\.svg$|map|locator|location|flag|coat[_ ]of[_ ]arms|sentinel|satellite|topograph|montage|collage|composite|banner|מפה/i;
 
 function looksLikeAPhotograph(url: string): boolean {
   // Wikimedia appends `?utm_source=…`, which defeats an end-anchored extension
