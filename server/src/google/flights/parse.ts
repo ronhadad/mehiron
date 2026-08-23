@@ -63,14 +63,21 @@ function dedupeAdjacent(values: readonly string[]): string[] {
   return values.filter((value, i) => value !== values[i - 1]);
 }
 
-/** `שעה 40 דקות`, `2 שעות 5 דקות`, `1 hr 40 min`, `45 min`. */
+/**
+ * `שעה 40 דקות`, `שעתיים 20 דקות`, `3 שעות 5 דקות`, `1 hr 40 min`, `45 min`.
+ *
+ * Hebrew has a dual. One hour is the bare word `שעה`; *two* hours is the single
+ * word `שעתיים` with no numeral at all; three or more take a numeral and `שעות`.
+ * Missing the dual made every two-hour flight report only its minutes — a
+ * 2 h 20 m hop to Athens came back as 20 minutes.
+ */
 export function parseDuration(text: string): number | null {
   const hours = /(\d+)\s*(?:שעות|שע׳|hr|hours?|h\b)/.exec(text);
-  // Hebrew writes a single hour as the bare word, with no numeral in front.
   const bareHebrewHour = /(?:^|[\s·])שעה(?=$|[\s·])/.test(text);
+  const hebrewDualHours = /(?:^|[\s·])שעתיים(?=$|[\s·])/.test(text);
   const minutes = /(\d+)\s*(?:דקות|דק׳|min(?:utes?)?\b|m\b)/.exec(text);
 
-  const h = hours?.[1] ? Number(hours[1]) : bareHebrewHour ? 1 : null;
+  const h = hours?.[1] ? Number(hours[1]) : hebrewDualHours ? 2 : bareHebrewHour ? 1 : null;
   const m = minutes?.[1] ? Number(minutes[1]) : null;
   if (h === null && m === null) return null;
   return (h ?? 0) * 60 + (m ?? 0);
@@ -96,6 +103,20 @@ export function parseRoute(text: string): string | null {
 }
 
 /**
+ * The route, read only from the part of the row that follows the duration.
+ *
+ * Airline names supply their own three-letter uppercase runs — `SKY express`
+ * turned a Tel Aviv departure into `SKY–ATH`. Google always prints the airports
+ * after the duration, so starting there removes the ambiguity rather than trying
+ * to out-guess it.
+ */
+function routeAfterDuration(text: string): string | null {
+  const duration = DURATION_PHRASE.exec(text);
+  const tail = duration?.index === undefined ? text : text.slice(duration.index + duration[0].length);
+  return parseRoute(tail) ?? parseRoute(text);
+}
+
+/**
  * Where the duration phrase starts.
  *
  * `שעה` has to appear in the numbered alternation as well as alone: Hebrew
@@ -103,7 +124,7 @@ export function parseRoute(text: string): string | null {
  * leaves the stray `1` attached to the airline name.
  */
 const DURATION_PHRASE =
-  /(?:\d+\s*(?:שעות|שעה|שע׳|hr|hours?|h\b)\s*)(?:\d+\s*(?:דקות|דק׳|min(?:utes?)?\b|m\b))?|\d+\s*(?:דקות|דק׳|min(?:utes?)?\b|m\b)|שעה(?=$|[\s·])/i;
+  /(?:\d+\s*(?:שעות|שעה|שע׳|hr|hours?|h\b)\s*)(?:\d+\s*(?:דקות|דק׳|min(?:utes?)?\b|m\b))?|(?:שעתיים|שעה)(?=$|[\s·])|\d+\s*(?:דקות|דק׳|min(?:utes?)?\b|m\b)/i;
 
 /**
  * A clock time together with the date Google appends to it.
@@ -147,7 +168,7 @@ function itineraryFrom(text: string): Itinerary | null {
 
   const times = dedupeAdjacent(normaliseTimes(text));
   const departTime = times[0] ?? null;
-  const route = parseRoute(text);
+  const route = routeAfterDuration(text);
 
   return {
     airline,

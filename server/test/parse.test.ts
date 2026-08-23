@@ -95,6 +95,10 @@ describe('flight text helpers', () => {
     assert.equal(parseDuration('2 שעות 5 דקות'), 125);
     assert.equal(parseDuration('1 hr 40 min'), 100);
     assert.equal(parseDuration('45 דקות'), 45);
+    // Hebrew's dual: two hours is one word with no numeral. Missing it made
+    // every 2 h 20 m flight to Athens report 20 minutes.
+    assert.equal(parseDuration('שעתיים 20 דקות'), 140);
+    assert.equal(parseDuration('שעתיים'), 120);
     assert.equal(parseDuration('no duration here'), null);
   });
 
@@ -108,7 +112,16 @@ describe('flight text helpers', () => {
 
   it('reads the route', () => {
     assert.equal(parseRoute('TLV–RHO'), 'TLV–RHO');
+    assert.equal(parseRoute('TLV Ben Gurion Airport – RHO Rhodes Airport'), 'TLV–RHO');
     assert.equal(parseRoute('no route'), null);
+  });
+
+  it('does not let an airline name pose as an airport code', () => {
+    // "SKY express" turned a Tel Aviv departure into SKY–ATH until the route was
+    // read from after the duration rather than from the whole row.
+    const row = '07:00 09:15 SKY express שעתיים 15 דקות TLV נמל התעופה בן גוריון – ATH Athens טיסה ישירה ₪2,680';
+    assert.equal(parseItineraries(`<li>${row}</li>`)[0]?.route, 'TLV–ATH');
+    assert.equal(parseItineraries(`<li>${row}</li>`)[0]?.airline, 'SKY express');
   });
 
   it('takes the airline from between the arrival time and the duration', () => {
