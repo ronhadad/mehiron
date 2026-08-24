@@ -13,3 +13,6 @@ dist/
 scratch/
 *.log
 .DS_Store
+
+# Prisma writes the dev database URL here.
+server/.env

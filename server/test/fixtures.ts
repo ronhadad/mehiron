@@ -21,3 +21,10 @@ export const FLIGHTS_TLV_RHO = 'flights-tlv-rho-2026-09-03';
 
 /** Isrotel King Solomon, Eilat, 17–21 February 2027, two adults, in ILS. */
 export const HOTELS_KING_SOLOMON = 'hotels-king-solomon-2027-02-17';
+
+/**
+ * A deliberately inexact hotel search: "dandrea mare rhodes", 22–29 September
+ * 2026, two adults. Google resolves it to D'Andrea Mare Beach Hotel and lists
+ * eight other Rhodes hotels beside it — the exact case the completion exists for.
+ */
+export const HOTELS_SEARCH_RHODES = 'hotels-search-rhodes';

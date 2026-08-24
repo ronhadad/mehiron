@@ -22,6 +22,9 @@ export interface Place {
   /** Google entity id, when the place has one. */
   mid: string | null;
   wikidataId: string;
+  /** Wikidata's coordinates (P625), for the map pin. */
+  latitude: number | null;
+  longitude: number | null;
 }
 
 /*
@@ -63,21 +66,42 @@ async function wikidata<T>(params: Record<string, string>): Promise<T | null> {
   }
 }
 
-/** The Freebase/Google id for a Wikidata entity, when it has one. */
-async function midOf(wikidataId: string): Promise<string | null> {
-  const body = await wikidata<{
-    claims?: { P646?: Array<{ mainsnak?: { datavalue?: { value?: string } } }> };
-  }>({ action: 'wbgetclaims', entity: wikidataId, property: 'P646' });
+/**
+ * The Google id and the coordinates for several entities in one request.
+ *
+ * `wbgetclaims` takes a single entity and a single property, so resolving five
+ * suggestions used to cost five requests and drew rate limiting almost
+ * immediately. `wbgetentities` accepts up to fifty ids at once and returns every
+ * claim, so the whole suggestion list now costs one call.
+ */
+async function factsFor(ids: readonly string[]): Promise<Map<string, { mid: string | null; latitude: number | null; longitude: number | null }>> {
+  const facts = new Map<string, { mid: string | null; latitude: number | null; longitude: number | null }>();
+  if (ids.length === 0) return facts;
 
-  return body?.claims?.P646?.[0]?.mainsnak?.datavalue?.value ?? null;
+  interface Snak {
+    mainsnak?: { datavalue?: { value?: unknown } };
+  }
+  const body = await wikidata<{
+    entities?: Record<string, { claims?: { P646?: Snak[]; P625?: Snak[] } }>;
+  }>({ action: 'wbgetentities', ids: ids.join('|'), props: 'claims' });
+
+  for (const [id, entity] of Object.entries(body?.entities ?? {})) {
+    const mid = entity.claims?.P646?.[0]?.mainsnak?.datavalue?.value;
+    const point = entity.claims?.P625?.[0]?.mainsnak?.datavalue?.value as
+      | { latitude?: number; longitude?: number }
+      | undefined;
+
+    facts.set(id, {
+      mid: typeof mid === 'string' ? mid : null,
+      latitude: typeof point?.latitude === 'number' ? point.latitude : null,
+      longitude: typeof point?.longitude === 'number' ? point.longitude : null,
+    });
+  }
+
+  return facts;
 }
 
-/**
- * Places matching what has been typed, best first.
- *
- * Only the top few are resolved to a mid: each one costs a second request, and
- * nobody reads past the first handful of suggestions.
- */
+/** Places matching what has been typed, best first. */
 export async function searchPlaces(query: string, language = 'he', limit = 5): Promise<Place[]> {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
@@ -93,20 +117,23 @@ export async function searchPlaces(query: string, language = 'he', limit = 5): P
     limit: String(Math.min(limit, 10)),
   });
 
-  const hits = body?.search ?? [];
-  const resolved: Place[] = [];
+  const hits = (body?.search ?? []).slice(0, limit);
+  const facts = await factsFor(hits.map((h) => h.id));
 
-  for (const hit of hits.slice(0, limit)) {
-    resolved.push({
-      label: hit.label ?? trimmed,
-      description: hit.description ?? null,
-      mid: await midOf(hit.id),
-      wikidataId: hit.id,
-    });
-  }
-
-  // A place with no Google id cannot be flown to, so it is not offered.
-  return resolved.filter((place) => place.mid !== null);
+  return hits
+    .map((hit) => {
+      const fact = facts.get(hit.id);
+      return {
+        label: hit.label ?? trimmed,
+        description: hit.description ?? null,
+        mid: fact?.mid ?? null,
+        wikidataId: hit.id,
+        latitude: fact?.latitude ?? null,
+        longitude: fact?.longitude ?? null,
+      };
+    })
+    // A place with no Google id cannot be flown to, so it is not offered.
+    .filter((place) => place.mid !== null);
 }
 
 /** Three uppercase letters is already an airport code and needs no lookup. */
@@ -123,7 +150,14 @@ export function isAirportCode(value: string): boolean {
 export async function resolveDestination(query: string, language = 'he'): Promise<Place | null> {
   const trimmed = query.trim();
   if (isAirportCode(trimmed)) {
-    return { label: trimmed.toUpperCase(), description: 'שדה תעופה', mid: trimmed.toUpperCase(), wikidataId: '' };
+    return {
+      label: trimmed.toUpperCase(),
+      description: 'שדה תעופה',
+      mid: trimmed.toUpperCase(),
+      wikidataId: '',
+      latitude: null,
+      longitude: null,
+    };
   }
   return (await searchPlaces(trimmed, language, 1))[0] ?? null;
 }

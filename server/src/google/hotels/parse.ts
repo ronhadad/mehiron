@@ -60,7 +60,9 @@ export function parseCompanyQuotes(html: string): CompanyQuote[] {
   const quotes = new Map<string, CompanyQuote>();
 
   for (const chunk of html.split(PARTNER_MARKER).slice(1)) {
-    const company = plainText(chunk.slice(0, chunk.indexOf('"'))).trim();
+    // Google's marker uses underscores where the company name has spaces —
+    // the hotel's own site arrives as `Sun_Beach_Resort`.
+    const company = plainText(chunk.slice(0, chunk.indexOf('"'))).replace(/_/g, ' ').trim();
     if (!company) continue;
 
     const body = plainText(chunk.slice(0, 2_600));

@@ -82,3 +82,24 @@ export function nightsBetween(checkin: string, checkout: string): number {
   });
   return Math.max(1, Math.round(((outMs as number) - (inMs as number)) / 86_400_000));
 }
+
+/**
+ * The page for one specific hotel, priced for this stay.
+ *
+ * Preferred over a text search wherever an entity id is known: it cannot match
+ * the wrong hotel, and it consistently returns more booking companies — Sun
+ * Beach Resort gives four here against one for the same hotel searched by name.
+ */
+export function hotelEntityUrl(entityId: string, search: Omit<HotelSearch, 'query'>): string {
+  const url = new URL(`https://www.google.com/travel/hotels/entity/${encodeURIComponent(entityId)}`);
+  url.searchParams.set('ts', buildTs({ ...search, query: '' }));
+  url.searchParams.set('hl', search.language ?? 'he');
+  url.searchParams.set('gl', search.country ?? 'il');
+  url.searchParams.set('curr', search.currency ?? 'ILS');
+  return url.toString();
+}
+
+/** The URL Google Hotels uses to search free text — the source of suggestions. */
+export function hotelSuggestUrl(search: HotelSearch): string {
+  return hotelSearchUrl(search);
+}

@@ -35,6 +35,9 @@ export interface SearchRequest {
 export interface SearchResponse {
   nights: number;
   photo: DestinationPhoto | null;
+  /** What was actually asked of Google — the entity and the URL, so a surprising
+   *  result can be traced to the search that produced it rather than guessed at. */
+  searched: { destination: string; flightsUrl: string; hotelQuery: string };
   flights: { itineraries: Itinerary[]; error: string | null };
   hotels: { quotes: CompanyQuote[]; error: string | null };
 }
@@ -71,19 +74,31 @@ export async function POST(request: Request): Promise<NextResponse> {
   const adults = Math.max(1, input.adults || 2);
   const hotelQuery = input.hotelQuery?.trim() || input.destination;
 
+  const flightsUrl = flightSearchUrl(
+    roundTrip({
+      from: input.origin ?? 'TLV',
+      to: input.destination,
+      depart: input.checkin,
+      return: input.checkout,
+      passengers: passengersFor(adults, childAges),
+      currency,
+    }),
+  );
+
   const [flights, hotels, photo] = await Promise.all([
     attempt<Itinerary[]>(async () => {
-      const url = flightSearchUrl(
-        roundTrip({
-          from: input.origin ?? 'TLV',
-          to: input.destination,
-          depart: input.checkin,
-          return: input.checkout,
-          passengers: passengersFor(adults, childAges),
-          currency,
-        }),
-      );
-      return parseItineraries((await fetchGooglePage(url)).html);
+      const { html } = await fetchGooglePage(flightsUrl);
+      const itineraries = parseItineraries(html);
+      /*
+       * An empty list has two very different causes, and conflating them means
+       * the screen says "no flights on these dates" when the truth is that the
+       * page changed shape or the request was turned away. Google states the
+       * former in words, so its absence is treated as the latter.
+       */
+      if (itineraries.length === 0 && !/לא נמצאו טיסות|no flights found|אין טיסות/i.test(html)) {
+        throw new Error('לא זוהו טיסות בדף של Google — ייתכן שהפורמט השתנה או שהבקשה נדחתה');
+      }
+      return itineraries;
     }, []),
 
     attempt<CompanyQuote[]>(async () => {
@@ -105,6 +120,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const body: SearchResponse = {
     nights: nightsBetween(input.checkin, input.checkout),
     photo,
+    searched: { destination: input.destination, flightsUrl, hotelQuery },
     flights: { itineraries: flights.value, error: flights.error },
     hotels: { quotes: hotels.value, error: hotels.error },
   };

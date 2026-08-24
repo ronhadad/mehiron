@@ -1,0 +1,164 @@
+// מחירון — a חופשה (group) owns the dates and the travellers; every flight and
+// hotel watched inside it is priced for exactly that stay.
+//
+// The two history tables are what make the app worth keeping: Snapshot is one
+// check of one option, and Quote is what each booking company asked at that
+// moment. "Booking was cheapest until Tuesday, now Agoda is" is a single join.
+
+generator client {
+  // No custom output: npm workspaces hoist @prisma/client to the repo root, and
+  // a generated client that does not sit beside it never resolves.
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A holiday: where, when, who. Everything watched inside it shares these.
+model Vacation {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Where to fly. `destinationMid` is what Google Flights actually searches;
+  /// the label is what a person reads, and the coordinates place the map pin.
+  destinationLabel String
+  destinationMid   String
+  wikidataId       String?
+  latitude         Float?
+  longitude        Float?
+  originAirport    String  @default("TLV")
+
+  /// Stored as dates, not strings: the check-in trap in Google's `ts` payload
+  /// makes it worth having one canonical representation.
+  checkin  DateTime @db.Date
+  checkout DateTime @db.Date
+
+  adults    Int   @default(2)
+  childAges Int[] @default([])
+  currency  String @default("ILS")
+
+  /// Filters, applied to what Google returns. Kept on the vacation so every
+  /// check re-runs the same search rather than drifting.
+  maxStops             Int?
+  freeCancellationOnly Boolean @default(false)
+  minRating            Float?
+  minStars             Int?
+  maxNightly           Int?
+
+  imageUrl         String?
+  imageAttribution String?
+  imageProvider    String?
+
+  /// How often to re-check, and whether the scheduler should bother.
+  intervalSeconds Int      @default(3600)
+  paused          Boolean  @default(false)
+  archived        Boolean  @default(false)
+  lastCheckedAt   DateTime?
+
+  options Option[]
+
+  @@index([archived, paused])
+}
+
+enum OptionKind {
+  FLIGHT
+  HOTEL
+}
+
+enum CheckStatus {
+  OK
+  EMPTY
+  FAILED
+}
+
+/// One thing being watched: a flight itinerary, or a hotel.
+///
+/// `CHEAPEST_FLIGHT` is modelled as a pinned option with `matchKey = null` — a
+/// vacation always wants "the cheapest fare for these dates" even when no
+/// specific itinerary has been chosen.
+model Option {
+  id         String     @id @default(cuid())
+  vacationId String
+  vacation   Vacation   @relation(fields: [vacationId], references: [id], onDelete: Cascade)
+  kind       OptionKind
+  title      String
+  createdAt  DateTime   @default(now())
+
+  /// How this option is re-found on the next check. For a flight it is
+  /// airline|departTime|route; for a hotel it is the query Google is given.
+  /// Null on a flight means "whatever is cheapest", which never goes stale.
+  matchKey String?
+
+  /// Flight facets, filled from the last successful check.
+  airline         String?
+  departTime      String?
+  arriveTime      String?
+  durationMinutes Int?
+  stops           Int?
+  route           String?
+
+  /// Hotel facets. `entityId` is Google's own id for the place; when present it
+  /// is what pricing uses, because a name that is merely close often returns a
+  /// page with no partner prices — or the wrong hotel entirely.
+  entityId    String?
+  hotelQuery  String?
+  stars       Int?
+  rating      Float?
+  ratingCount Int?
+  latitude    Float?
+  longitude   Float?
+
+  favorite    Boolean @default(false)
+  active      Boolean @default(true)
+  targetPrice Int?
+
+  lastCheckedAt DateTime?
+  lastStatus    CheckStatus?
+  lastPrice     Int?
+  previousPrice Int?
+  lowestPrice   Int?
+  lowestAt      DateTime?
+
+  snapshots Snapshot[]
+
+  @@unique([vacationId, kind, matchKey])
+  @@index([vacationId, kind])
+}
+
+/// One check of one option.
+model Snapshot {
+  id        String      @id @default(cuid())
+  optionId  String
+  option    Option      @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  checkedAt DateTime    @default(now())
+  status    CheckStatus
+  price     Int?
+  currency  String?
+  /// Denormalised winner, so a sparkline needs no join.
+  cheapestCompany String?
+  note            String?
+
+  quotes Quote[]
+
+  @@index([optionId, checkedAt])
+}
+
+/// What one booking company asked, in one snapshot.
+model Quote {
+  id         String   @id @default(cuid())
+  snapshotId String
+  snapshot   Snapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  company    String
+  price      Int
+  nightly    Int?
+  currency   String
+  conditions String?
+  freeCancellation Boolean @default(false)
+
+  @@index([snapshotId])
+  @@index([company])
+}
