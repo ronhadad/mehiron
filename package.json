@@ -16,7 +16,7 @@
     "probe": "npm run probe --workspace @mahiron/server --",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "postinstall": "npx --yes prisma generate --schema server/prisma/schema.prisma"
+    "postinstall": "node scripts/prisma-generate.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
