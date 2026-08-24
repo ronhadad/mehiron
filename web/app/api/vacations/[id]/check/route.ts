@@ -12,8 +12,14 @@ type RouteContext = { params: Promise<unknown> };
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-// A vacation with several hotels is several sequential Google requests.
-export const maxDuration = 120;
+/*
+ * Vercel's Hobby plan caps a function at 60 seconds, so 120 was never going to
+ * be honoured. A check is sequential — one flights page, then one page per
+ * hotel, with a politeness gap between them — so a group with many hotels can
+ * still run out of time. When it does, the snapshots already written stand and
+ * the rest are simply not recorded; the response says how far it got.
+ */
+export const maxDuration = 60;
 
 export async function POST(_: Request, ctx: RouteContext): Promise<NextResponse> {
   const { id } = (await ctx.params) as { id: string };

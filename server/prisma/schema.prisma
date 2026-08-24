@@ -9,6 +9,10 @@ generator client {
   // No custom output: npm workspaces hoist @prisma/client to the repo root, and
   // a generated client that does not sit beside it never resolves.
   provider = "prisma-client-js"
+  // Vercel's runtime is Amazon Linux with OpenSSL 3. Without its engine the
+  // build succeeds and then every query fails at request time, which is the
+  // worse failure — so both targets are built.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {

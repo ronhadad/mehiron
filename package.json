@@ -15,7 +15,8 @@
     "verify": "npm run check && npm test",
     "probe": "npm run probe --workspace @mahiron/server --",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "postinstall": "prisma generate --schema server/prisma/schema.prisma"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

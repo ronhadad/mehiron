@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "functions": {
+    "app/api/vacations/[id]/check/route.ts": { "maxDuration": 60 },
+    "app/api/vacations/[id]/hotels/suggest/route.ts": { "maxDuration": 30 },
+    "app/api/search/route.ts": { "maxDuration": 30 }
+  }
+}
