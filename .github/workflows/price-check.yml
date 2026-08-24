@@ -1,0 +1,76 @@
+# The clock behind every vacation's interval.
+#
+# Vercel's Hobby plan will only run a cron once a day, which cannot honour a
+# 15-minute or hourly interval. GitHub Actions can, and on a public repository
+# it is free. All it does is hit the sweep endpoint; the app decides what is
+# actually due, so firing more often than any interval is harmless.
+#
+# Two things to know about GitHub's scheduler: it is best-effort and often runs
+# several minutes late, and it disables scheduled workflows on a repository with
+# no activity for 60 days. Neither matters much for tracking prices, but the
+# second is why this also accepts a manual run.
+name: price check
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+# One sweep at a time. A queued-up second run would find nothing due anyway,
+# and cancelling it keeps a slow sweep from stacking up behind itself.
+concurrency:
+  group: price-check
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask the app to check whatever is due
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::CRON_SECRET is not set on this repository. Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          url="${APP_URL:-https://mehiron-web-nu.vercel.app}/api/cron/check"
+
+          # --max-time covers the function's own 60s ceiling with room to spare.
+          code=$(curl --silent --show-error --max-time 120 \
+                      --header "Authorization: Bearer ${CRON_SECRET}" \
+                      --output response.json --write-out '%{http_code}' \
+                      "$url") || true
+
+          echo "HTTP $code"
+          # Trailing newline: jq/cat on a compact JSON body leaves the log unterminated.
+          cat response.json 2>/dev/null | head -c 4000; echo
+
+          if [ "$code" != "200" ]; then
+            echo "::error::sweep returned HTTP $code"
+            exit 1
+          fi
+
+          # Surface price falls in the run summary, so the Actions list itself
+          # reads as a log of what changed.
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          try:
+              s = json.load(open('response.json'))
+          except Exception as e:
+              print(f'could not read the response: {e}')
+              raise SystemExit
+          print(f"checked **{len(s.get('ran', []))}** of **{s.get('due', 0)}** due in {s.get('tookMs', 0)} ms\n")
+          for d in s.get('drops', []):
+              print(f"- 📉 {d.get('title')}: {d.get('from')} → {d.get('to')}")
+          for e in s.get('ran', []):
+              if e.get('error'):
+                  print(f"- ⚠️ {e.get('name')}: {e['error']}")
+          for e in s.get('deferred', []):
+              print(f"- ⏳ deferred for time: {e.get('name')}")
+          PY
