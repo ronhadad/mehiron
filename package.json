@@ -16,13 +16,13 @@
     "probe": "npm run probe --workspace @mahiron/server --",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "postinstall": "prisma generate --schema server/prisma/schema.prisma"
+    "postinstall": "npx --yes prisma generate --schema server/prisma/schema.prisma"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.3"
+    "@prisma/client": "^6.19.3",
+    "prisma": "^6.19.3"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2",
-    "prisma": "^6.19.3"
+    "concurrently": "^9.1.2"
   }
 }
