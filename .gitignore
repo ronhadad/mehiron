@@ -16,3 +16,6 @@ scratch/
 
 # Prisma writes the dev database URL here.
 server/.env
+
+# Local setup notes, contains a generated secret.
+VERCEL-SETUP.local.txt

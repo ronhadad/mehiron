@@ -9,7 +9,7 @@ The repo is an npm workspace with two packages, and the Next app is one of them.
 | Root Directory | `web` |
 | Include files outside the root directory | **on** — the app imports `../server` |
 | Framework Preset | Next.js |
-| Install Command | `cd .. && npm install` |
+| Install Command | `cd .. && npm install` — or `npm install --prefix=..`; both work |
 | Build Command | *(leave default — `next build`)* |
 | Output Directory | *(leave default)* |
 
@@ -18,8 +18,11 @@ The repo is an npm workspace with two packages, and the Next app is one of them.
 it the build fails with `Can't resolve '@prisma/client'`, because the client is
 generated rather than shipped.
 
-`--prefix=..` also installs from the root but does not reliably run workspace
-lifecycle scripts; `cd .. && npm install` does.
+`prisma` is declared in the root `package.json` as well as in `server`, and that
+is load-bearing rather than redundant: npm puts `node_modules/.bin` on PATH only
+for scripts belonging to a package that *declares* the dependency. The binary was
+hoisted to the root all along, but the root did not declare it, so the root
+postinstall failed with `prisma: command not found`.
 
 ## Environment variables
 

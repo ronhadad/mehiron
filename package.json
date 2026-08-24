@@ -1,7 +1,7 @@
 {
   "name": "mahiron",
-  "version": "0.1.0",
   "private": true,
+  "version": "0.1.0",
   "workspaces": [
     "server",
     "web"
@@ -18,7 +18,11 @@
     "infra:down": "docker compose down",
     "postinstall": "prisma generate --schema server/prisma/schema.prisma"
   },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "prisma": "^6.19.3"
   }
 }
