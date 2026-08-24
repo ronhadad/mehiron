@@ -24,6 +24,7 @@
     "prisma": "^6.19.3"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "vercel": "^59.5.0"
   }
 }

@@ -19,3 +19,5 @@ server/.env
 
 # Local setup notes, contains a generated secret.
 VERCEL-SETUP.local.txt
+.vercel
+.env*
