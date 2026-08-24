@@ -59,6 +59,17 @@ export default function Home(): React.JSX.Element {
         <button className="btn" onClick={() => setCreating((v) => !v)}>
           {creating ? 'סגירה' : 'חופשה חדשה'}
         </button>
+        <button
+          className="link"
+          onClick={() => {
+            void fetch('/api/auth', { method: 'DELETE' }).then(() => {
+              // A full navigation, so the middleware sees the cleared cookie.
+              window.location.href = '/login';
+            });
+          }}
+        >
+          יציאה
+        </button>
       </header>
 
       <main>

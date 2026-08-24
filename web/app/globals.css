@@ -833,3 +833,13 @@ label.f .k {
   cursor: pointer;
   padding: 0 2px;
 }
+
+/* ── the sign-in screen ─────────────────────────────────────── */
+.gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  max-width: none;
+}

@@ -23,9 +23,15 @@ lifecycle scripts; `cd .. && npm install` does.
 
 ## Environment variables
 
+All three are required. With `APP_PASSWORD` or `AUTH_SECRET` missing, the app
+refuses every request instead of serving an open one — a deployment lacking its
+configuration must not be a public one.
+
 | Name | Notes |
 | --- | --- |
-| `DATABASE_URL` | A hosted Postgres. The local Docker instance on port 5434 is not reachable from Vercel. |
+| `DATABASE_URL` | A hosted Postgres. The local Docker instance on port 5434 is not reachable from Vercel. Prisma runs inside the Next process, so it has to be in *this* app's environment; `server/.env` is read only by the Prisma CLI. |
+| `APP_PASSWORD` | The single sign-in password. |
+| `AUTH_SECRET` | Signs the session cookie. `openssl rand -base64 32`. Changing it signs everyone out. |
 
 After the database exists, create the tables:
 
@@ -33,7 +39,7 @@ After the database exists, create the tables:
 DATABASE_URL='<the hosted url>' npx prisma migrate deploy --schema server/prisma/schema.prisma
 ```
 
-Nothing else is required — there are no API keys anywhere in this app. Destination
+No API keys are required anywhere in this app. Destination
 photos come from Wikimedia, coordinates and Google entity ids from Wikidata, maps
 from OpenStreetMap, and prices from Google over plain HTTP.
 
@@ -60,6 +66,15 @@ frequent needs Pro.
 
 ## Access
 
-The app has no authentication. Deployed as-is, anyone with the URL can create
-groups, delete them, and cause Google requests to be made. Fix that before sharing
-the URL.
+One password, set in `APP_PASSWORD`, and a session cookie signed with
+`AUTH_SECRET` — there is no user table, because there is one account.
+
+The cookie is `HttpOnly`, `SameSite=Lax`, thirty days, and `Secure` in production
+only (a Secure cookie is never stored over plain HTTP, so localhost would never
+sign in). Middleware guards every path except `/login` and `/api/auth`: pages
+redirect, API routes answer 401.
+
+What this is not: there is no per-IP rate limiting, because serverless has no
+shared store to count attempts in. Each sign-in attempt is delayed instead, which
+makes guessing at scale expensive without helping a real visitor. The defence that
+matters is a password worth having.

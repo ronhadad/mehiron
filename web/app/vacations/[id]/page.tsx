@@ -127,6 +127,17 @@ export default function VacationPage(): React.JSX.Element {
         <button className="btn" onClick={() => void check()} disabled={busy}>
           {busy ? 'בודקים…' : 'בדיקה עכשיו'}
         </button>
+        <button
+          className="link"
+          onClick={() => {
+            void fetch('/api/auth', { method: 'DELETE' }).then(() => {
+              // A full navigation, so the middleware sees the cleared cookie.
+              window.location.href = '/login';
+            });
+          }}
+        >
+          יציאה
+        </button>
       </header>
 
       <main>
