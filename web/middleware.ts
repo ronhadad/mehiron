@@ -11,7 +11,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE, authConfig, sessionIsValid } from '@server/domain/session.js';
 
 /** The sign-in page and its endpoint must stay reachable, or nobody can get in. */
-const OPEN = ['/login', '/api/auth'];  // /api/auth covers the Google routes beneath it
+/*
+ * /api/auth covers the Google routes beneath it. /api/cron is open to the
+ * middleware but not to the internet: a scheduler has no cookie to present, so
+ * that route authenticates itself against CRON_SECRET and refuses to run when
+ * the variable is unset.
+ */
+const OPEN = ['/login', '/api/auth', '/api/cron'];
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;

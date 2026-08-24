@@ -92,3 +92,34 @@ What this is not: there is no per-IP rate limiting, because serverless has no
 shared store to count attempts in. Each sign-in attempt is delayed instead, which
 makes guessing at scale expensive without helping a real visitor. The defence that
 matters is a password worth having.
+
+## Automatic checks
+
+Each vacation stores an `intervalSeconds`. Nothing inside the app runs it — the
+schedule is *pulled* from outside by hitting one endpoint:
+
+    GET /api/cron/check     Authorization: Bearer $CRON_SECRET
+
+The endpoint decides what is actually due, so it is safe to call more often than
+any interval; a sweep with nothing due returns in about 10 ms. With
+`CRON_SECRET` unset it refuses to run rather than running unauthenticated,
+because an open version of this URL lets anyone spend the deployment's Google
+requests. Vercel sends that header to its own cron invocations automatically once
+the variable exists.
+
+Two schedulers call it, deliberately:
+
+- **`.github/workflows/price-check.yml`, every 15 minutes.** This is the real
+  clock — it is what makes a 15-minute or hourly interval mean anything. Free on
+  a public repository. Needs, under the repo's Settings → Secrets and variables →
+  Actions: the secret `CRON_SECRET`, and optionally the variable `APP_URL` (it
+  falls back to the production URL). GitHub's scheduler runs late by a few
+  minutes and disables scheduled workflows after 60 days with no repo activity.
+- **`web/vercel.json`, once a day at 05:00 UTC.** A safety net, not the
+  schedule. Vercel's Hobby plan permits a cron *once per day and no more*, so a
+  more frequent expression here is rejected at deploy time. On Pro this can be
+  tightened and the Actions workflow dropped.
+
+A sweep stops starting new vacations after 45 s, under the 60 s Hobby function
+ceiling, and names in `deferred` whatever it did not reach — those lead the next
+sweep, because due vacations are checked least-recently-first.
