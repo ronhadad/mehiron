@@ -129,7 +129,12 @@ model Option {
   @@index([vacationId, kind])
 }
 
-/// One check of one option.
+/// One check of one option, for one stay.
+///
+/// The stay is recorded here and not only on the vacation, because a vacation's
+/// dates can be edited. A price for seven nights in September says nothing about
+/// four nights in February, so plotting both on one line would invent a drop
+/// that never happened. History is therefore read back per stay.
 model Snapshot {
   id        String      @id @default(cuid())
   optionId  String
@@ -138,6 +143,13 @@ model Snapshot {
   status    CheckStatus
   price     Int?
   currency  String?
+
+  /// The stay this price was for. Nullable only because rows written before the
+  /// dates became editable are backfilled from their vacation.
+  stayCheckin  DateTime? @db.Date
+  stayCheckout DateTime? @db.Date
+  stayAdults   Int?
+  stayChildAges Int[]    @default([])
   /// Denormalised winner, so a sparkline needs no join.
   cheapestCompany String?
   note            String?

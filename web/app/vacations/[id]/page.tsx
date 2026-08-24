@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   addHotel,
   checkVacation,
@@ -19,9 +19,12 @@ import {
   money,
   movement,
   nightsBetween,
+  deleteVacation,
+  isoDate,
   removeOption,
   setFavorite,
   suggestHotels,
+  updateVacation,
   type HotelSuggestion,
   type OptionRow,
   type VacationWithOptions,
@@ -29,7 +32,9 @@ import {
 
 export default function VacationPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = params.id;
+  const [editing, setEditing] = useState(false);
 
   const [vacation, setVacation] = useState<VacationWithOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +121,9 @@ export default function VacationPage(): React.JSX.Element {
                 : 'עוד לא נבדק'}
           </span>
         </div>
+        <button className="ghost" onClick={() => setEditing((v) => !v)}>
+          {editing ? 'סגירה' : 'עריכה'}
+        </button>
         <button className="btn" onClick={() => void check()} disabled={busy}>
           {busy ? 'בודקים…' : 'בדיקה עכשיו'}
         </button>
@@ -148,6 +156,17 @@ export default function VacationPage(): React.JSX.Element {
             </div>
           </div>
         </div>
+
+        {editing && (
+          <EditVacation
+            vacation={vacation}
+            onSaved={() => {
+              setEditing(false);
+              load();
+            }}
+            onDeleted={() => router.push('/')}
+          />
+        )}
 
         {(vacation.imageUrl || vacation.latitude !== null) && (
           <>
@@ -485,6 +504,195 @@ function AddHotel({ vacationId, onAdded }: { vacationId: string; onAdded: () => 
         בחירה מהרשימה שומרת את המלון לפי המזהה של Google, לא לפי השם — כך הבדיקה תמיד מגיעה לאותו מלון, ומחזירה יותר
         חברות. המחירים ברשימה הם לתאריכים של החופשה הזאת.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Changing or deleting the group.
+ *
+ * Editing the dates is the interesting case: the prices already collected were
+ * for the old stay, so the summary numbers are recomputed from history for the
+ * new one — which usually means they clear until the next check. The note below
+ * says so, because a total quietly resetting to "—" otherwise looks like a bug.
+ */
+function EditVacation({
+  vacation,
+  onSaved,
+  onDeleted,
+}: {
+  vacation: VacationWithOptions;
+  onSaved: () => void;
+  onDeleted: () => void;
+}): React.JSX.Element {
+  const [name, setName] = useState(vacation.name);
+  const [checkin, setCheckin] = useState(isoDate(vacation.checkin));
+  const [checkout, setCheckout] = useState(isoDate(vacation.checkout));
+  const [adults, setAdults] = useState(vacation.adults);
+  const [childAges, setChildAges] = useState(vacation.childAges.join(','));
+  const [origin, setOrigin] = useState(vacation.originAirport);
+  const [minutes, setMinutes] = useState(Math.round(vacation.intervalSeconds / 60));
+  const [maxStops, setMaxStops] = useState(vacation.maxStops === null ? '' : String(vacation.maxStops));
+  const [freeOnly, setFreeOnly] = useState(vacation.freeCancellationOnly);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const stayChanged =
+    checkin !== isoDate(vacation.checkin) ||
+    checkout !== isoDate(vacation.checkout) ||
+    adults !== vacation.adults ||
+    childAges !== vacation.childAges.join(',');
+
+  const save = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await updateVacation(vacation.id, {
+        name,
+        checkin,
+        checkout,
+        adults,
+        childAges: childAges.split(',').map((a) => Number(a.trim())).filter(Number.isFinite),
+        originAirport: origin,
+        intervalSeconds: Math.max(5, minutes) * 60,
+        maxStops: maxStops.trim() === '' ? null : Number(maxStops),
+        freeCancellationOnly: freeOnly,
+      });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'העדכון נכשל');
+    } finally {
+      setBusy(false);
+    }
+  }, [vacation.id, name, checkin, checkout, adults, childAges, origin, minutes, maxStops, freeOnly, onSaved]);
+
+  const remove = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteVacation(vacation.id);
+      onDeleted();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'המחיקה נכשלה');
+      setBusy(false);
+    }
+  }, [vacation.id, onDeleted]);
+
+  const watched = vacation.options.length;
+
+  return (
+    <div className="panel" style={{ marginBottom: 22 }}>
+      <div className="panel-head">
+        <h2>עריכת החופשה</h2>
+        <span className="count">תאריכים, נוסעים, תדירות וסינון</span>
+      </div>
+
+      <div style={{ padding: 22 }}>
+        <div className="fields">
+          <label className="f">
+            <span className="k">שם</span>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="f">
+            <span className="k">משדה</span>
+            <input className="input" value={origin} onChange={(e) => setOrigin(e.target.value)} />
+          </label>
+          <label className="f">
+            <span className="k">צ׳ק-אין</span>
+            <input className="input num" type="date" value={checkin} onChange={(e) => setCheckin(e.target.value)} />
+          </label>
+          <label className="f">
+            <span className="k">צ׳ק-אאוט</span>
+            <input className="input num" type="date" value={checkout} onChange={(e) => setCheckout(e.target.value)} />
+          </label>
+          <label className="f">
+            <span className="k">מבוגרים</span>
+            <input
+              className="input num"
+              type="number"
+              min={1}
+              max={9}
+              value={adults}
+              onChange={(e) => setAdults(Number(e.target.value))}
+            />
+          </label>
+          <label className="f">
+            <span className="k">גילי ילדים</span>
+            <input className="input" placeholder="1,8" value={childAges} onChange={(e) => setChildAges(e.target.value)} />
+          </label>
+          <button className="btn" onClick={() => void save()} disabled={busy}>
+            {busy ? 'שומרים…' : 'שמירה'}
+          </button>
+        </div>
+
+        <div className="fields" style={{ marginTop: 14 }}>
+          <label className="f">
+            <span className="k">בדיקה כל (דקות)</span>
+            <input
+              className="input num"
+              type="number"
+              min={5}
+              value={minutes}
+              onChange={(e) => setMinutes(Number(e.target.value))}
+            />
+          </label>
+          <label className="f">
+            <span className="k">מקסימום עצירות</span>
+            <input
+              className="input num"
+              placeholder="בלי הגבלה"
+              value={maxStops}
+              onChange={(e) => setMaxStops(e.target.value)}
+            />
+          </label>
+          <label className="f">
+            <span className="k">ביטול חינם בלבד</span>
+            <button
+              className="ghost"
+              onClick={() => setFreeOnly((v) => !v)}
+              style={freeOnly ? { background: 'var(--ink)', color: 'var(--paper)', borderColor: 'var(--ink)' } : undefined}
+            >
+              {freeOnly ? 'כן — רק ביטול חינם' : 'לא — כל המחירים'}
+            </button>
+          </label>
+        </div>
+
+        {stayChanged && (
+          <p className="note" style={{ padding: '14px 0 0', border: 0 }}>
+            שינוי התאריכים או הנוסעים מחליף את מה שנמדד: המחירים שנאספו הם לשהייה הקודמת, ולא ניתן להשוות ביניהם.
+            ההיסטוריה נשמרת אבל מוצגת רק לשהייה המתאימה, והסיכומים יתאפסו עד הבדיקה הבאה.
+          </p>
+        )}
+      </div>
+
+      {error && <p className="note bad">{error}</p>}
+
+      <div style={{ padding: '16px 22px', borderTop: '1px solid var(--line-soft)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        {!confirming ? (
+          <button className="link" onClick={() => setConfirming(true)} style={{ color: 'var(--up-ink)' }}>
+            מחיקת החופשה
+          </button>
+        ) : (
+          <>
+            <span style={{ fontSize: 13.5, color: 'var(--up-ink)', fontWeight: 600 }}>
+              למחוק את &quot;{vacation.name}&quot; ואת {watched} הפריטים במעקב, כולל ההיסטוריה?
+            </span>
+            <button
+              className="btn"
+              onClick={() => void remove()}
+              disabled={busy}
+              style={{ background: 'var(--up-ink)', boxShadow: 'none' }}
+            >
+              {busy ? 'מוחקים…' : 'כן, למחוק'}
+            </button>
+            <button className="ghost" onClick={() => setConfirming(false)} disabled={busy}>
+              ביטול
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

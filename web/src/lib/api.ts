@@ -29,6 +29,12 @@ export const getVacation = (id: string): Promise<{ vacation: VacationWithOptions
 export const createVacation = (input: unknown): Promise<{ vacation: VacationWithOptions }> =>
   send('/api/vacations', { method: 'POST', body: JSON.stringify(input) });
 
+export const updateVacation = (id: string, edit: unknown): Promise<{ vacation: VacationWithOptions }> =>
+  send(`/api/vacations/${id}`, { method: 'PATCH', body: JSON.stringify(edit) });
+
+export const deleteVacation = (id: string): Promise<{ ok: true }> =>
+  send(`/api/vacations/${id}`, { method: 'DELETE' });
+
 export const checkVacation = (id: string): Promise<{ outcome: { checked: number; failed: number; drops: unknown[] } }> =>
   send(`/api/vacations/${id}/check`, { method: 'POST' });
 
@@ -58,6 +64,11 @@ const MONTHS = [
   'בינואר', 'בפברואר', 'במרץ', 'באפריל', 'במאי', 'ביוני',
   'ביולי', 'באוגוסט', 'בספטמבר', 'באוקטובר', 'בנובמבר', 'בדצמבר',
 ];
+
+/** An ISO date or timestamp → `2026-09-22`, for a date input. */
+export function isoDate(value: string | Date): string {
+  return (typeof value === 'string' ? value : value.toISOString()).slice(0, 10);
+}
 
 /** An ISO date or timestamp → `4 באוקטובר`. */
 export function hebrewDate(value: string | Date): string {

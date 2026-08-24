@@ -50,9 +50,18 @@ function keepQuote(quote: CompanyQuote, freeOnly: boolean, maxNightly: number | 
   return true;
 }
 
+/** The stay a snapshot is being recorded for. */
+interface Stay {
+  checkin: Date;
+  checkout: Date;
+  adults: number;
+  childAges: number[];
+}
+
 /** Write one snapshot and move the option's rolled-up numbers along. */
 async function record(
   option: Option,
+  stay: Stay,
   status: CheckStatus,
   price: number | null,
   currency: string | null,
@@ -66,6 +75,10 @@ async function record(
       status,
       price,
       currency,
+      stayCheckin: stay.checkin,
+      stayCheckout: stay.checkout,
+      stayAdults: stay.adults,
+      stayChildAges: stay.childAges,
       cheapestCompany: quotes[0]?.company ?? null,
       note,
       quotes: {
@@ -105,6 +118,12 @@ async function record(
 
 export async function checkVacation(vacation: VacationWithOptions): Promise<CheckOutcome> {
   const terms = searchTerms(vacation);
+  const stay: Stay = {
+    checkin: vacation.checkin,
+    checkout: vacation.checkout,
+    adults: vacation.adults,
+    childAges: vacation.childAges,
+  };
   const outcome: CheckOutcome = { vacationId: vacation.id, checked: 0, failed: 0, drops: [] };
 
   const flightOptions = vacation.options.filter((o) => o.kind === 'FLIGHT' && o.active);
@@ -143,7 +162,7 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
       outcome.checked += 1;
       if (itineraries === null) {
         outcome.failed += 1;
-        await record(option, 'FAILED', null, null, [], failure);
+        await record(option, stay, 'FAILED', null, null, [], failure);
         continue;
       }
 
@@ -152,11 +171,11 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
       const found = option.matchKey === null ? itineraries[0] : itineraries.find((i) => keyOf(i) === option.matchKey);
 
       if (!found) {
-        await record(option, 'EMPTY', null, null, [], 'הטיסה לא הופיעה בבדיקה הזאת');
+        await record(option, stay, 'EMPTY', null, null, [], 'הטיסה לא הופיעה בבדיקה הזאת');
         continue;
       }
 
-      const { dropped } = await record(option, 'OK', Math.round(found.price), found.currency, [], null, {
+      const { dropped } = await record(option, stay, 'OK', Math.round(found.price), found.currency, [], null, {
         title: option.matchKey === null ? option.title : `${found.airline} · ${found.departTime ?? ''}`.trim(),
         airline: found.airline,
         departTime: found.departTime,
@@ -175,7 +194,7 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
     try {
       // Google's own id beats the name every time: it cannot match the wrong
       // hotel, and it returns more booking companies for the same stay.
-      const stay = {
+      const asked = {
         checkin: terms.checkin,
         checkout: terms.checkout,
         adults: terms.adults,
@@ -183,24 +202,24 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
         currency: terms.currency,
       };
       const url = option.entityId
-        ? hotelEntityUrl(option.entityId, stay)
-        : hotelSearchUrl({ ...stay, query: option.hotelQuery ?? option.title });
+        ? hotelEntityUrl(option.entityId, asked)
+        : hotelSearchUrl({ ...asked, query: option.hotelQuery ?? option.title });
       const { html } = await fetchGooglePage(url);
       const quotes = parseCompanyQuotes(html).filter((q) =>
         keepQuote(q, vacation.freeCancellationOnly, vacation.maxNightly),
       );
 
       if (quotes.length === 0) {
-        await record(option, 'EMPTY', null, null, [], 'לא נמצאו מחירים למלון הזה בבדיקה הזאת');
+        await record(option, stay, 'EMPTY', null, null, [], 'לא נמצאו מחירים למלון הזה בבדיקה הזאת');
         continue;
       }
 
       const cheapest = quotes[0] as CompanyQuote;
-      const { dropped } = await record(option, 'OK', Math.round(cheapest.total), cheapest.currency, quotes, null);
+      const { dropped } = await record(option, stay, 'OK', Math.round(cheapest.total), cheapest.currency, quotes, null);
       if (dropped) outcome.drops.push({ optionId: option.id, title: option.title, ...dropped });
     } catch (error) {
       outcome.failed += 1;
-      await record(option, 'FAILED', null, null, [], error instanceof Error ? error.message : 'הבדיקה נכשלה');
+      await record(option, stay, 'FAILED', null, null, [], error instanceof Error ? error.message : 'הבדיקה נכשלה');
     }
   }
 
