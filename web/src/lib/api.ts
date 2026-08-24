@@ -110,3 +110,76 @@ export function movement(last: number | null, previous: number | null): 'down' |
   if (last > previous) return 'up';
   return 'flat';
 }
+
+/* ── price history, shaped for plotting ───────────────────────────── */
+
+export interface Point {
+  at: Date;
+  price: number;
+}
+
+/**
+ * A price series for one option, oldest first.
+ *
+ * Only successful checks contribute. A failed or empty check has no price, and
+ * drawing it as zero would show a crash to nothing that never happened — the
+ * gap is the honest representation.
+ */
+export function seriesOf(option: OptionRow, days: number): Point[] {
+  const since = Date.now() - days * 86_400_000;
+  return option.snapshots
+    .filter((s) => s.price !== null && new Date(s.checkedAt).getTime() >= since)
+    .map((s) => ({ at: new Date(s.checkedAt), price: s.price as number }))
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+}
+
+export interface PlotGeometry {
+  line: string;
+  area: string;
+  last: { x: number; y: number };
+  min: number;
+  max: number;
+  targetY: number | null;
+}
+
+/**
+ * Turn a series into SVG paths.
+ *
+ * The vertical range is padded and never zero-height: a price that has not moved
+ * would otherwise plot as a line along the very top of the box, which reads as a
+ * maximum rather than as "flat".
+ */
+export function plot(points: Point[], width: number, height: number, target: number | null): PlotGeometry | null {
+  if (points.length === 0) return null;
+
+  const prices = points.map((p) => p.price);
+  if (target !== null) prices.push(target);
+  const low = Math.min(...prices);
+  const high = Math.max(...prices);
+  const pad = (high - low) * 0.15 || Math.max(1, high * 0.02);
+  const min = low - pad;
+  const max = high + pad;
+
+  const x = (i: number): number => (points.length === 1 ? width / 2 : (i / (points.length - 1)) * width);
+  const y = (price: number): number => height - ((price - min) / (max - min)) * height;
+
+  const coords = points.map((p, i) => `${x(i).toFixed(1)},${y(p.price).toFixed(1)}`);
+  const lastPoint = points[points.length - 1] as Point;
+
+  return {
+    line: coords.join(' '),
+    area: `${coords.join(' ')} ${width.toFixed(1)},${height} 0,${height}`,
+    last: { x: x(points.length - 1), y: y(lastPoint.price) },
+    min: low,
+    max: high,
+    targetY: target === null ? null : y(target),
+  };
+}
+
+/** `14:32` for today, `22.9 14:32` otherwise. */
+export function shortTime(at: Date): string {
+  const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+  const today = new Date();
+  const sameDay = at.toDateString() === today.toDateString();
+  return sameDay ? time : `${at.getDate()}.${at.getMonth() + 1} ${time}`;
+}

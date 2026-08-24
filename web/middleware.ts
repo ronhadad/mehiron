@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE, authConfig, sessionIsValid } from '@server/domain/session.js';
 
 /** The sign-in page and its endpoint must stay reachable, or nobody can get in. */
-const OPEN = ['/login', '/api/auth'];
+const OPEN = ['/login', '/api/auth'];  // /api/auth covers the Google routes beneath it
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;

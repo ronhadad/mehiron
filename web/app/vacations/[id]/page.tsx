@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { INTERVALS } from '@server/domain/vacations';
 import {
   addHotel,
   checkVacation,
@@ -23,10 +24,14 @@ import {
   isoDate,
   removeOption,
   setFavorite,
+  plot,
+  seriesOf,
+  shortTime,
   suggestHotels,
   updateVacation,
   type HotelSuggestion,
   type OptionRow,
+  type Point,
   type VacationWithOptions,
 } from '@/lib/api';
 
@@ -282,6 +287,8 @@ function OptionRowView({
   currency: string;
   onChanged: () => void;
 }): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [days, setDays] = useState(30);
   const dir = movement(option.lastPrice, option.previousPrice);
   const delta =
     option.lastPrice !== null && option.previousPrice !== null ? Math.abs(option.lastPrice - option.previousPrice) : null;
@@ -294,7 +301,10 @@ function OptionRowView({
     .map((s) => s.price as number);
   const cheapest = option.snapshots.find((s) => s.status === 'OK');
 
+  const history = seriesOf(option, days);
+
   return (
+    <>
     <div className="row">
       <button
         className="link"
@@ -360,6 +370,16 @@ function OptionRowView({
         )}
       </div>
 
+      <button
+        className="link"
+        title={open ? 'סגירת הגרף' : 'הצגת היסטוריית מחירים'}
+        onClick={() => setOpen((v) => !v)}
+        style={{ fontSize: 15 }}
+        aria-expanded={open}
+      >
+        {open ? '⌃' : '⌄'}
+      </button>
+
       {!(option.kind === 'FLIGHT' && option.matchKey === null) && (
         <button
           className="link"
@@ -371,6 +391,137 @@ function OptionRowView({
         </button>
       )}
     </div>
+
+    {open && (
+      <div className="history">
+        <div className="history-head">
+          <div>
+            <div className="k">היסטוריית מחירים</div>
+            <div className="range">
+              {[7, 30, 90].map((d) => (
+                <button
+                  key={d}
+                  className="fchip"
+                  aria-pressed={days === d}
+                  onClick={() => setDays(d)}
+                >
+                  {d} ימים
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="spacer" />
+          {history.length > 0 && (
+            <div style={{ textAlign: 'end', fontSize: 12.5, color: 'var(--muted)' }}>
+              <div>
+                שפל <span className="num">{money(Math.min(...history.map((p) => p.price)), currency)}</span>
+              </div>
+              <div>
+                שיא <span className="num">{money(Math.max(...history.map((p) => p.price)), currency)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <PriceChart points={history} currency={currency} target={option.targetPrice} />
+
+        {option.snapshots.length > 0 && (
+          <table className="log">
+            <tbody>
+              {option.snapshots.slice(0, 8).map((s) => (
+                <tr key={s.id}>
+                  <td className="num">{shortTime(new Date(s.checkedAt))}</td>
+                  <td>{s.price === null ? '—' : <span className="num">{money(s.price, s.currency ?? currency)}</span>}</td>
+                  <td>
+                    {s.status === 'OK' ? (
+                      s.cheapestCompany ?? 'נמצא'
+                    ) : (
+                      <span style={{ color: 'var(--muted)' }}>{s.note ?? s.status}</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    )}
+    </>
+  );
+}
+
+/**
+ * The price line for one option.
+ *
+ * A single point is drawn as a dot rather than a line, and an empty series says
+ * so instead of rendering an empty box — the two states people actually hit
+ * early on, when there is one check or none.
+ */
+function PriceChart({
+  points,
+  currency,
+  target,
+}: {
+  points: Point[];
+  currency: string;
+  target: number | null;
+}): React.JSX.Element {
+  const W = 640;
+  const H = 180;
+  const geometry = plot(points, W, H, target);
+
+  if (!geometry) {
+    return (
+      <p className="note" style={{ padding: '18px 0 6px', border: 0 }}>
+        עוד אין מחירים בטווח הזה. כל בדיקה מוסיפה נקודה — נסו טווח ארוך יותר, או הריצו בדיקה עכשיו.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      {/* Not scaled horizontally: time reads left-to-right even in an RTL page,
+          because the newest price belongs at the end of the line people scan. */}
+      <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label="גרף מחירים">
+        {[0.25, 0.5, 0.75].map((f) => (
+          <line key={f} x1={0} x2={W} y1={H * f} y2={H * f} stroke="var(--line-soft)" strokeWidth={1} />
+        ))}
+        {geometry.targetY !== null && (
+          <line
+            x1={0}
+            x2={W}
+            y1={geometry.targetY}
+            y2={geometry.targetY}
+            stroke="var(--accent)"
+            strokeWidth={1.5}
+            strokeDasharray="5 5"
+          />
+        )}
+        <polyline points={geometry.area} fill="rgba(46,158,107,.11)" stroke="none" />
+        <polyline
+          points={geometry.line}
+          fill="none"
+          stroke="var(--down)"
+          strokeWidth={2.5}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <circle cx={geometry.last.x} cy={geometry.last.y} r={5} fill="var(--down)" stroke="var(--surface)" strokeWidth={2.5} />
+      </svg>
+      <div className="axis">
+        <span className="num">{shortTime(points[0]!.at)}</span>
+        <span>
+          <span className="num">{points.length}</span> בדיקות עם מחיר
+          {target !== null && (
+            <>
+              {' · יעד '}
+              <span className="num">{money(target, currency)}</span>
+            </>
+          )}
+        </span>
+        <span className="num">{shortTime(points[points.length - 1]!.at)}</span>
+      </div>
+    </>
   );
 }
 
@@ -542,7 +693,8 @@ function EditVacation({
   const [adults, setAdults] = useState(vacation.adults);
   const [childAges, setChildAges] = useState(vacation.childAges.join(','));
   const [origin, setOrigin] = useState(vacation.originAirport);
-  const [minutes, setMinutes] = useState(Math.round(vacation.intervalSeconds / 60));
+  const [interval, setInterval] = useState(vacation.intervalSeconds);
+  const [paused, setPaused] = useState(vacation.paused);
   const [maxStops, setMaxStops] = useState(vacation.maxStops === null ? '' : String(vacation.maxStops));
   const [freeOnly, setFreeOnly] = useState(vacation.freeCancellationOnly);
 
@@ -567,7 +719,8 @@ function EditVacation({
         adults,
         childAges: childAges.split(',').map((a) => Number(a.trim())).filter(Number.isFinite),
         originAirport: origin,
-        intervalSeconds: Math.max(5, minutes) * 60,
+        intervalSeconds: interval,
+        paused,
         maxStops: maxStops.trim() === '' ? null : Number(maxStops),
         freeCancellationOnly: freeOnly,
       });
@@ -577,7 +730,7 @@ function EditVacation({
     } finally {
       setBusy(false);
     }
-  }, [vacation.id, name, checkin, checkout, adults, childAges, origin, minutes, maxStops, freeOnly, onSaved]);
+  }, [vacation.id, name, checkin, checkout, adults, childAges, origin, interval, paused, maxStops, freeOnly, onSaved]);
 
   const remove = useCallback(async () => {
     setBusy(true);
@@ -638,17 +791,32 @@ function EditVacation({
           </button>
         </div>
 
-        <div className="fields" style={{ marginTop: 14 }}>
-          <label className="f">
-            <span className="k">בדיקה כל (דקות)</span>
-            <input
-              className="input num"
-              type="number"
-              min={5}
-              value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
-            />
-          </label>
+        <div style={{ marginTop: 18 }}>
+          <span className="k" style={{ display: 'block', marginBottom: 8 }}>
+            תדירות בדיקה
+          </span>
+          <div className="range">
+            {INTERVALS.map((o) => (
+              <button
+                key={o.seconds}
+                className="fchip"
+                aria-pressed={interval === o.seconds}
+                onClick={() => setInterval(o.seconds)}
+              >
+                כל {o.label}
+              </button>
+            ))}
+            <button className="fchip" aria-pressed={paused} onClick={() => setPaused((v) => !v)}>
+              {paused ? 'מושהה' : 'פעיל'}
+            </button>
+          </div>
+          <p className="note" style={{ padding: '10px 0 0', border: 0 }}>
+            התדירות נשמרת עם החופשה, אבל אין עדיין מתזמן שירוץ לפיה — בדיקות מתבצעות כשלוחצים
+            &quot;בדיקה עכשיו&quot;. זה החלק הבא.
+          </p>
+        </div>
+
+        <div className="fields" style={{ marginTop: 18 }}>
           <label className="f">
             <span className="k">מקסימום עצירות</span>
             <input

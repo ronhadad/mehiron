@@ -243,6 +243,19 @@ async function rebaseOptions(vacation: Vacation): Promise<void> {
   }
 }
 
+/**
+ * The cadences offered in the interface.
+ *
+ * Presets rather than a free number: the useful range is narrow, and a typed
+ * value invites someone to ask Google for the same page every ten seconds.
+ */
+export const INTERVALS = [
+  { seconds: 900, label: '15 דק׳' },
+  { seconds: 3600, label: 'שעה' },
+  { seconds: 6 * 3600, label: '6 שעות' },
+  { seconds: 24 * 3600, label: 'יום' },
+] as const;
+
 /** Everything a check needs, in the shapes the Google layer expects. */
 export function searchTerms(vacation: Vacation): {
   checkin: string;

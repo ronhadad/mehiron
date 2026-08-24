@@ -843,3 +843,121 @@ label.f .k {
   padding: 24px;
   max-width: none;
 }
+
+/* ── Google sign-in ─────────────────────────────────────────── */
+.google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.google:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.google:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 4px;
+  color: var(--faint);
+  font-size: 12px;
+}
+.or::before,
+.or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ── price history ──────────────────────────────────────────── */
+.history {
+  padding: 4px 22px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--hover);
+}
+.history-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 0 12px;
+  flex-wrap: wrap;
+}
+.history-head .k {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+.range {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fchip {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 6px 13px;
+}
+.fchip[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.fchip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.chart {
+  width: 100%;
+  height: 190px;
+  display: block;
+}
+.axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--fainter);
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+table.log {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 16px;
+}
+table.log td {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+table.log td:first-child {
+  width: 92px;
+}
+table.log td:nth-child(2) {
+  font-weight: 600;
+  color: var(--ink);
+  width: 110px;
+}
