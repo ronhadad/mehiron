@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 3200",
-    "build": "next build",
+    "build": "node ../scripts/prisma-generate.mjs && next build",
     "start": "next start --port 3200",
     "check": "tsc --noEmit"
   },
