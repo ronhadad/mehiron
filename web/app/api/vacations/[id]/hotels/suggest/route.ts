@@ -13,6 +13,8 @@ type RouteContext = { params: Promise<unknown> };
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// One suggestion lookup is a 2.5 MB Google page load.
+export const maxDuration = 30;
 
 export async function GET(request: Request, ctx: RouteContext): Promise<NextResponse> {
   const { id } = (await ctx.params) as { id: string };

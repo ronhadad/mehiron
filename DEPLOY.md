@@ -46,6 +46,17 @@ No API keys are required anywhere in this app. Destination
 photos come from Wikimedia, coordinates and Google entity ids from Wikidata, maps
 from OpenStreetMap, and prices from Google over plain HTTP.
 
+## No vercel.json
+
+There was one, declaring `functions: { "app/api/.../route.ts": { maxDuration } }`,
+and it broke the deployment before the build even started — a five-line log that
+stopped at "Cloning completed". Those patterns describe source files, but Vercel
+builds functions for the App Router from the framework's own output, so the
+patterns matched nothing and the configuration was rejected.
+
+Per-route budgets belong in the route: `export const maxDuration`. Sixty seconds
+for a check, thirty for the two that make a single Google request.
+
 ## Two things that will behave differently in the cloud
 
 **Google may refuse a datacenter IP.** Everything here rests on ordinary HTTP

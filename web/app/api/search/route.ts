@@ -17,6 +17,8 @@ import { destinationPhoto, type DestinationPhoto } from '@server/google/images.j
 export const runtime = 'nodejs';
 // Each request drives two live searches; nothing here is cacheable.
 export const dynamic = 'force-dynamic';
+// Two live Google searches, run together.
+export const maxDuration = 30;
 
 export interface SearchRequest {
   /** Airport code or Google entity mid — what the flights search needs. */
