@@ -183,3 +183,22 @@ export function shortTime(at: Date): string {
   const sameDay = at.toDateString() === today.toDateString();
   return sameDay ? time : `${at.getDate()}.${at.getMonth() + 1} ${time}`;
 }
+
+/**
+ * Hebrew counts, which do not work the way English plurals do.
+ *
+ * One is a word, not a numeral: "מלון אחד", never "1 מלונות". Two has its own
+ * form and drops the numeral entirely — "שני מלונות", not "2 מלונות". Three and
+ * up take the numeral with the plural noun. Getting this wrong is the clearest
+ * possible signal that nobody read the screen in Hebrew.
+ */
+export function count(n: number, one: string, two: string, many: string): string {
+  if (n === 1) return one;
+  if (n === 2) return two;
+  return `${n} ${many}`;
+}
+
+export const nightsLabel = (n: number): string => count(n, 'לילה אחד', 'שני לילות', 'לילות');
+export const hotelsLabel = (n: number): string => count(n, 'מלון אחד', 'שני מלונות', 'מלונות');
+export const companiesLabel = (n: number): string => count(n, 'חברה אחת', 'שתי חברות', 'חברות');
+export const adultsLabel = (n: number): string => count(n, 'מבוגר אחד', 'שני מבוגרים', 'מבוגרים');

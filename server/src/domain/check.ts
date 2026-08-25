@@ -17,6 +17,7 @@ import { parseItineraries, type Itinerary } from '../google/flights/parse.js';
 import { flightSearchUrl, passengersFor, roundTrip } from '../google/flights/url.js';
 import { parseCompanyQuotes, type CompanyQuote } from '../google/hotels/parse.js';
 import { hotelEntityUrl, hotelSearchUrl } from '../google/hotels/url.js';
+import { readRendered, retryBudget, shellNote } from '../google/rendered.js';
 import type { CheckStatus, Option } from '@prisma/client';
 
 export interface CheckOutcome {
@@ -125,6 +126,9 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
     childAges: vacation.childAges,
   };
   const outcome: CheckOutcome = { vacationId: vacation.id, checked: 0, failed: 0, drops: [] };
+  // Shared across the flights page and every hotel, so a long shortlist
+  // cannot push the check past the function's time limit.
+  const retries = retryBudget();
 
   const flightOptions = vacation.options.filter((o) => o.kind === 'FLIGHT' && o.active);
   const hotelOptions = vacation.options.filter((o) => o.kind === 'HOTEL' && o.active);
@@ -146,13 +150,29 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
     let itineraries: Itinerary[] | null = null;
     let failure: string | null = null;
     try {
-      const { html } = await fetchGooglePage(url);
-      const parsed = parseItineraries(html).filter((i) => keepFlight(i, vacation.maxStops));
-      const empty = /לא נמצאו טיסות|no flights found|אין טיסות/i.test(html);
-      if (parsed.length === 0 && !empty) {
+      /*
+       * Google inlines the fares only some of the time; otherwise it returns the
+       * page shell and renders them in the browser. That is indistinguishable
+       * from "no flights" by size or status code, so it is detected by its own
+       * loading label and retried — spaced, because hammering reliably fails.
+       */
+      let sawEmptyMessage = false;
+      const { items, attempts, shell } = await readRendered(
+        async () => {
+          const { html } = await fetchGooglePage(url);
+          sawEmptyMessage = /לא נמצאו טיסות|no flights found|אין טיסות/i.test(html);
+          return html;
+        },
+        (html) => parseItineraries(html).filter((i) => keepFlight(i, vacation.maxStops)),
+        retries,
+      );
+
+      if (shell) {
+        failure = shellNote(attempts);
+      } else if (items.length === 0 && !sawEmptyMessage) {
         failure = 'לא זוהו טיסות בדף של Google — ייתכן שהפורמט השתנה או שהבקשה נדחתה';
       } else {
-        itineraries = parsed;
+        itineraries = items;
       }
     } catch (error) {
       failure = error instanceof Error ? error.message : 'החיפוש נכשל';
@@ -204,10 +224,20 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
       const url = option.entityId
         ? hotelEntityUrl(option.entityId, asked)
         : hotelSearchUrl({ ...asked, query: option.hotelQuery ?? option.title });
-      const { html } = await fetchGooglePage(url);
-      const quotes = parseCompanyQuotes(html).filter((q) =>
-        keepQuote(q, vacation.freeCancellationOnly, vacation.maxNightly),
+      // Hotels arrive as a shell for the same reason flights do, which is what
+      // made the company quotes look intermittent.
+      const { items: quotes, attempts, shell } = await readRendered(
+        async () => (await fetchGooglePage(url)).html,
+        (html) => parseCompanyQuotes(html).filter((q) => keepQuote(q, vacation.freeCancellationOnly, vacation.maxNightly)),
+        retries,
+        2,
       );
+
+      if (shell) {
+        outcome.failed += 1;
+        await record(option, stay, 'FAILED', null, null, [], shellNote(attempts));
+        continue;
+      }
 
       if (quotes.length === 0) {
         await record(option, stay, 'EMPTY', null, null, [], 'לא נמצאו מחירים למלון הזה בבדיקה הזאת');

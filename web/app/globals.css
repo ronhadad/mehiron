@@ -961,3 +961,53 @@ table.log td:nth-child(2) {
   color: var(--ink);
   width: 110px;
 }
+
+/* ── phones ──────────────────────────────────────────────────────
+ * The desktop layout puts an icon, a name, a sparkline, a price and
+ * two controls on a single line, inside 40px page gutters and 22px
+ * row gutters. On a 360px screen that leaves roughly 230px for all
+ * of it, so the price was squeezed past the card's edge and clipped,
+ * and the booking companies stacked one per line.
+ *
+ * So here the gutters shrink and the row wraps into two lines: what
+ * it is, then what it costs. Everything else follows from having
+ * room again.
+ */
+@media (max-width: 620px) {
+  main { padding: 20px 14px 64px; }
+  .mast { gap: 10px 14px; padding: 13px 15px; }
+  .mark b { font-size: 22px; }
+  .mast .live { font-size: 12px; }
+
+  h1.page { font-size: 29px; }
+  p.lede { font-size: 13.5px; }
+  .head { gap: 16px; margin-bottom: 20px; }
+
+  /* Two stats per row rather than one; min-width: 126px forced one. */
+  .stats { gap: 8px; width: 100%; }
+  .stat { flex: 1 1 calc(50% - 4px); min-width: 0; padding: 11px 13px; }
+  .stat .v { font-size: 20px; }
+
+  .panel-head { padding: 14px 15px; gap: 3px 10px; flex-wrap: wrap; }
+  .panel-head h2 { font-size: 20px; }
+  .panel.pad { padding: 15px; }
+  .note { padding: 12px 15px; }
+
+  .row { padding: 13px 15px; gap: 8px 10px; align-items: flex-start; }
+  /*
+   * The glyph is 38px and the gap 10px, so this fills the rest of the
+   * first line exactly — which is what forces the price onto its own
+   * line instead of letting it fight the name for space.
+   */
+  .row .grow { flex: 1 1 calc(100% - 48px); }
+  .row .name { white-space: normal; }
+  .row .price { min-width: 0; text-align: start; }
+  .row .price .v { font-size: 18px; }
+  /* The sparkline costs 110px, and the full chart is one tap away. */
+  .row > svg { display: none; }
+  /* Keep the expand and remove controls at the far end of that line. */
+  .row > button.link:first-of-type { margin-inline-start: auto; }
+
+  .history { padding-inline: 15px; }
+  .fields { gap: 10px; }
+}

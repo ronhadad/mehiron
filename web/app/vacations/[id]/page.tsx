@@ -13,26 +13,30 @@ import { useParams, useRouter } from 'next/navigation';
 import { INTERVALS } from '@server/domain/vacations';
 import {
   addHotel,
+  adultsLabel,
   checkVacation,
+  companiesLabel,
+  deleteVacation,
   getVacation,
   hebrewDate,
+  hotelsLabel,
+  isoDate,
   mapUrl,
   money,
   movement,
   nightsBetween,
-  deleteVacation,
-  isoDate,
-  removeOption,
-  setFavorite,
+  nightsLabel,
   plot,
+  removeOption,
   seriesOf,
+  setFavorite,
   shortTime,
   suggestHotels,
-  updateVacation,
   type HotelSuggestion,
   type OptionRow,
   type Point,
   type VacationWithOptions,
+  updateVacation,
 } from '@/lib/api';
 
 export default function VacationPage(): React.JSX.Element {
@@ -151,8 +155,7 @@ export default function VacationPage(): React.JSX.Element {
             <h1 className="page">{vacation.name}</h1>
             <p className="lede">
               {vacation.originAirport} → {vacation.destinationLabel} · {hebrewDate(vacation.checkin)} –{' '}
-              {hebrewDate(vacation.checkout)} · <span className="num">{nights}</span> לילות ·{' '}
-              <span className="num">{vacation.adults}</span> מבוגרים
+              {hebrewDate(vacation.checkout)} · {nightsLabel(nights)} · {adultsLabel(vacation.adults)}
               {vacation.childAges.length > 0 && `, ילדים בני ${vacation.childAges.join(', ')}`}
             </p>
           </div>
@@ -241,7 +244,7 @@ export default function VacationPage(): React.JSX.Element {
           <section className="panel">
             <div className="panel-head">
               <h2>איפה לישון</h2>
-              <span className="count">{hotels.length} מלונות במעקב</span>
+              <span className="count">{hotelsLabel(hotels.length)} במעקב</span>
               <div className="spacer" />
               <span className="chip">
                 <span className="num">{nights}</span> לילות
@@ -335,7 +338,7 @@ function OptionRowView({
           ) : (
             <>
               {cheapest?.cheapestCompany && <>הזול: {cheapest.cheapestCompany}</>}
-              {cheapest?.quotes.length ? ` · ${cheapest.quotes.length} חברות` : ''}
+              {cheapest?.quotes.length ? ` · ${companiesLabel(cheapest.quotes.length)}` : ''}
               {option.lastStatus === 'EMPTY' && ' · Google לא הציגה מחירים בבדיקה האחרונה'}
               {option.lastStatus === 'FAILED' && ' · הבדיקה האחרונה נכשלה'}
             </>

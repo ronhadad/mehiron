@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
+  adultsLabel,
   createVacation,
   hebrewDate,
   inDays,
@@ -19,6 +20,7 @@ import {
   money,
   movement,
   nightsBetween,
+  nightsLabel,
   searchPlaces,
   type Place,
   type VacationWithOptions,
@@ -156,7 +158,7 @@ function VacationCard({ vacation }: { vacation: VacationWithOptions }): React.JS
           <span className="cap">
             <b>{vacation.destinationLabel}</b>
             <span>
-              {nights} לילות · {vacation.adults} מבוגרים
+              {nightsLabel(nights)} · {adultsLabel(vacation.adults)}
               {vacation.childAges.length > 0 && `, ${vacation.childAges.length} ילדים`}
             </span>
           </span>
