@@ -1020,6 +1020,27 @@ table.log td:nth-child(2) {
   color: var(--faint);
 }
 
+/* ── what was paid ──────────────────────────────────────────── */
+.booked {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 14px;
+  flex-wrap: wrap;
+}
+.booked .k {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--faint);
+  letter-spacing: .03em;
+}
+.booked .hint {
+  font-size: 12px;
+  color: var(--faint);
+  flex: 1;
+  min-width: 160px;
+}
+
 /* ── phones ──────────────────────────────────────────────────────
  * The desktop layout puts an icon, a name, a sparkline, a price and
  * two controls on a single line, inside 40px page gutters and 22px

@@ -31,6 +31,7 @@ import {
   recommendHotels,
   removeOption,
   seriesOf,
+  setBooked,
   setFavorite,
   shortTime,
   suggestHotels,
@@ -334,6 +335,19 @@ function OptionRowView({
 
   const history = seriesOf(option, days);
 
+  /*
+   * Money back rather than a missed opportunity. Only shown when the current
+   * price is genuinely below what was paid — and for a hotel, only when some
+   * company still offers free cancellation, because without it the saving is
+   * theoretical: there is no way to take the cheaper rate.
+   */
+  const freeCancellation = cheapest?.quotes.some((q) => q.freeCancellation) ?? false;
+  const saving =
+    option.bookedPrice !== null && option.lastPrice !== null
+      ? Math.round(option.bookedPrice - option.lastPrice)
+      : null;
+  const canRebook = saving !== null && saving >= 20 && (option.kind === 'FLIGHT' || freeCancellation);
+
   return (
     <>
     <div className="row">
@@ -372,6 +386,14 @@ function OptionRowView({
             </>
           )}
         </div>
+        {canRebook && (
+          <div style={{ marginTop: 7 }}>
+            <span className="chip best" title="מחיר נוכחי נמוך ממה ששילמת">
+              💸 {money(saving, currency)} בחזרה אם מזמינים מחדש
+              {option.kind === 'HOTEL' && freeCancellation ? ' · ביטול חינם' : ''}
+            </span>
+          </div>
+        )}
         {cheapest && cheapest.quotes.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7 }}>
             {cheapest.quotes.map((q, i) => (
@@ -454,6 +476,7 @@ function OptionRowView({
           )}
         </div>
 
+        <BookedPrice option={option} currency={currency} onChanged={onChanged} />
         <PriceChart points={history} currency={currency} target={option.targetPrice} />
 
         {option.snapshots.length > 0 && (
@@ -570,6 +593,65 @@ function Sparkline({ values, direction }: { values: number[]; direction: 'down' 
     <svg viewBox="0 0 110 34" width={110} height={34} style={{ flex: 'none', transform: 'scaleX(-1)' }} aria-hidden="true">
       <polyline points={points} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/**
+ * What was actually paid, so a later drop reads as money back.
+ *
+ * This is the whole of Pruvo's business reduced to one field: a price tracker
+ * only becomes actionable once it knows what you already committed to. Before
+ * that, "the price fell" is trivia — after it, the same number is a refund with
+ * an expiry date attached.
+ */
+function BookedPrice({
+  option,
+  currency,
+  onChanged,
+}: {
+  option: OptionRow;
+  currency: string;
+  onChanged: () => void;
+}): React.JSX.Element {
+  const [value, setValue] = useState(option.bookedPrice === null ? '' : String(option.bookedPrice));
+  const [busy, setBusy] = useState(false);
+
+  const save = useCallback(
+    async (next: number | null) => {
+      setBusy(true);
+      try {
+        await setBooked(option.id, next);
+        onChanged();
+      } finally {
+        setBusy(false);
+      }
+    },
+    [option.id, onChanged],
+  );
+
+  return (
+    <div className="booked">
+      <span className="k">שילמתם</span>
+      <input
+        className="input num"
+        inputMode="numeric"
+        placeholder="—"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          const parsed = Number(value.replace(/[^\d.]/g, ''));
+          const next = value.trim() === '' || !Number.isFinite(parsed) || parsed <= 0 ? null : parsed;
+          if (next !== option.bookedPrice) void save(next);
+        }}
+        disabled={busy}
+        style={{ maxWidth: 110 }}
+      />
+      <span className="hint">
+        {option.bookedPrice === null
+          ? 'הזינו מה שילמתם, ותקבלו התראה אם המחיר יורד מתחת לזה'
+          : `נשמר${option.bookedAt ? ` ${hebrewDate(option.bookedAt)}` : ''} · ${money(option.bookedPrice, currency)}`}
+      </span>
+    </div>
   );
 }
 

@@ -16,15 +16,34 @@
 import webpush, { WebPushError } from 'web-push';
 import { db } from './db.js';
 
-export interface Drop {
+/**
+ * Why someone is being interrupted.
+ *
+ * Ranked, and the order is the point. `rebook` is money already spent coming
+ * back and is the only one with a deadline attached, so it outranks everything.
+ * `target` is a number the reader chose themselves, so it beats a drop they
+ * never asked about. `drop` is news.
+ */
+export type AlertKind = 'rebook' | 'target' | 'drop';
+
+export interface Alert {
+  kind: AlertKind;
   vacationId: string;
   vacationName: string;
   optionId: string;
   title: string;
+  currency: string;
+  /** Where the price came from: the previous check, or what was paid. */
   from: number;
   to: number;
-  currency: string;
+  /** The number the reader set, on a `target` alert. */
+  target?: number;
+  /** Whether the booking can still be cancelled free, on a `rebook` alert. */
+  freeCancellation?: boolean;
 }
+
+/** Kept for the sweep's own summary, which counts plain drops. */
+export type Drop = Alert;
 
 export interface PushConfig {
   publicKey: string;
@@ -43,33 +62,62 @@ export function pushConfig(): PushConfig | null {
 }
 
 /**
- * The message for a set of drops.
+ * The message for everything one sweep found.
  *
- * One notification for the whole sweep, not one per drop: three hotels falling
- * at once is one useful event, and three buzzes for it is an annoyance that gets
- * notifications turned off.
+ * One notification for the sweep rather than one per finding. Three hotels
+ * falling at once is a single useful event, and three buzzes for it is how
+ * someone learns to swipe these away unread — after which the one that mattered
+ * gets swiped away too.
+ *
+ * The headline goes to the most actionable finding, not the largest number: a
+ * ₪200 rebooking that expires when free cancellation does beats a ₪900 drop on
+ * something nobody has booked.
  */
-export function composeMessage(drops: readonly Drop[]): { title: string; body: string; url: string } | null {
-  if (drops.length === 0) return null;
+const RANK: Record<AlertKind, number> = { rebook: 0, target: 1, drop: 2 };
 
-  const biggest = [...drops].sort((a, b) => b.from - b.to - (a.from - a.to))[0] as Drop;
-  const saving = Math.round(biggest.from - biggest.to);
-  const money = (n: number): string => `${Math.round(n).toLocaleString('he-IL')} ₪`;
+const shekels = (n: number): string => `${Math.round(n).toLocaleString('he-IL')} ₪`;
 
-  if (drops.length === 1) {
-    return {
-      title: `↓ ${money(saving)} — ${biggest.title}`,
-      body: `${biggest.vacationName}: ${money(biggest.from)} → ${money(biggest.to)}`,
-      url: `/vacations/${biggest.vacationId}`,
-    };
+function headlineOf(alert: Alert): string {
+  const saving = Math.round(alert.from - alert.to);
+  if (alert.kind === 'rebook') return `💸 ${shekels(saving)} בחזרה — ${alert.title}`;
+  if (alert.kind === 'target') return `🎯 ${alert.title} הגיע ל-${shekels(alert.to)}`;
+  return `↓ ${shekels(saving)} — ${alert.title}`;
+}
+
+function detailOf(alert: Alert): string {
+  if (alert.kind === 'rebook') {
+    const terms = alert.freeCancellation
+      ? 'הביטול עדיין חינם — אפשר להזמין מחדש ולבטל'
+      : 'כדאי לבדוק את תנאי הכרטיס לפני שמזמינים מחדש';
+    return `${alert.vacationName}: שילמת ${shekels(alert.from)}, עכשיו ${shekels(alert.to)}. ${terms}.`;
+  }
+  if (alert.kind === 'target') {
+    return `${alert.vacationName}: היעד שהגדרת היה ${shekels(alert.target ?? alert.to)}.`;
+  }
+  return `${alert.vacationName}: ${shekels(alert.from)} → ${shekels(alert.to)}`;
+}
+
+export function composeMessage(alerts: readonly Alert[]): { title: string; body: string; url: string } | null {
+  if (alerts.length === 0) return null;
+
+  // Most actionable kind first, and within a kind the largest saving.
+  const ordered = [...alerts].sort(
+    (a, b) => RANK[a.kind] - RANK[b.kind] || (b.from - b.to) - (a.from - a.to),
+  );
+  const lead = ordered[0] as Alert;
+
+  const oneVacation = new Set(alerts.map((a) => a.vacationId)).size === 1;
+  const url = oneVacation ? `/vacations/${lead.vacationId}` : '/';
+
+  if (alerts.length === 1) {
+    return { title: headlineOf(lead), body: detailOf(lead), url };
   }
 
-  const total = drops.reduce((sum, d) => sum + (d.from - d.to), 0);
+  const others = alerts.length - 1;
   return {
-    title: `↓ ${drops.length} מחירים ירדו`,
-    body: `הגדול ביותר: ${biggest.title}, ${money(saving)}. סה״כ ${money(total)} על ${drops.length} מעקבים.`,
-    // More than one vacation may be involved, so the list is the honest target.
-    url: new Set(drops.map((d) => d.vacationId)).size === 1 ? `/vacations/${biggest.vacationId}` : '/',
+    title: headlineOf(lead),
+    body: `${detailOf(lead)} ועוד ${others === 1 ? 'עדכון אחד' : `${others} עדכונים`}.`,
+    url,
   };
 }
 
@@ -85,8 +133,8 @@ export function isGone(statusCode: number): boolean {
  * everything correctly has succeeded even if a phone could not be reached, and
  * throwing here would turn a delivery problem into a lost price.
  */
-export async function notifyDrops(drops: readonly Drop[]): Promise<{ sent: number; pruned: number }> {
-  const message = composeMessage(drops);
+export async function notifyDrops(alerts: readonly Alert[]): Promise<{ sent: number; pruned: number }> {
+  const message = composeMessage(alerts);
   const config = pushConfig();
   if (!message || !config) return { sent: 0, pruned: 0 };
 

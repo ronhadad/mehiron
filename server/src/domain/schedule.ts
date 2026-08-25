@@ -15,7 +15,7 @@
 import { db } from './db.js';
 import { checkVacation, type CheckOutcome } from './check.js';
 import { listVacations, type VacationWithOptions } from './vacations.js';
-import { notifyDrops, type Drop } from './notify.js';
+import { notifyDrops, type Alert } from './notify.js';
 
 /** The minimum a vacation needs for the question "is it due?" to be answerable. */
 export interface Schedulable {
@@ -81,7 +81,9 @@ export interface Sweep {
   /** Due but not reached before the budget ran out — named, so it is not silent. */
   deferred: Array<{ vacationId: string; name: string }>;
   /** Price falls found anywhere in the sweep, the reason to read the result. */
-  drops: Drop[];
+  drops: Alert[];
+  /** Targets reached and rebooking opportunities, the alerts worth acting on. */
+  alerts: Alert[];
   /** Browsers reached, and dead subscriptions removed. */
   notified: { sent: number; pruned: number };
 }
@@ -129,6 +131,7 @@ export async function runDueChecks(options: SweepOptions = {}): Promise<Sweep> {
     ran: [],
     deferred: [],
     drops: [],
+    alerts: [],
     notified: { sent: 0, pruned: 0 },
   };
 
@@ -148,14 +151,16 @@ export async function runDueChecks(options: SweepOptions = {}): Promise<Sweep> {
         error: null,
         tookMs: Date.now() - one,
       });
-      for (const drop of outcome.drops) {
-        sweep.drops.push({
-          vacationId: vacation.id,
-          vacationName: vacation.name,
-          currency: vacation.currency,
-          ...drop,
-        });
+      const where = {
+        vacationId: vacation.id,
+        vacationName: vacation.name,
+        currency: vacation.currency,
+      };
+      for (const d of outcome.drops) sweep.drops.push({ kind: 'drop', ...where, ...d });
+      for (const t of outcome.targets) {
+        sweep.alerts.push({ kind: 'target', ...where, ...t, from: t.target });
       }
+      for (const r of outcome.rebookings) sweep.alerts.push({ kind: 'rebook', ...where, ...r });
     } catch (error) {
       /*
        * The stamp matters on failure too. Without it a vacation that throws
@@ -185,8 +190,17 @@ export async function runDueChecks(options: SweepOptions = {}): Promise<Sweep> {
    * A delivery failure must not fail the sweep: the prices are already written
    * down, and losing them over an unreachable phone would be the wrong trade.
    */
-  if (sweep.drops.length > 0) {
-    sweep.notified = await notifyDrops(sweep.drops).catch(() => ({ sent: 0, pruned: 0 }));
+  /*
+   * Drops and the actionable alerts go out together, so a target reached and the
+   * drop that reached it are one notification rather than two. A drop that also
+   * produced a rebooking or a target is dropped from the plain list — the
+   * stronger alert already says the price fell, and saying it twice in one
+   * message reads like a bug.
+   */
+  const louder = new Set(sweep.alerts.map((a) => a.optionId));
+  const everything = [...sweep.alerts, ...sweep.drops.filter((d) => !louder.has(d.optionId))];
+  if (everything.length > 0) {
+    sweep.notified = await notifyDrops(everything).catch(() => ({ sent: 0, pruned: 0 }));
   }
 
   sweep.tookMs = Date.now() - began;

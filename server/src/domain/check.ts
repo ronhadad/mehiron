@@ -20,12 +20,17 @@ import { hotelEntityUrl, hotelSearchUrl } from '../google/hotels/url.js';
 import { readRendered, retryBudget, shellNote } from '../google/rendered.js';
 import { parsePriceIndex, type PriceIndex } from '../google/flights/insight.js';
 import type { CheckStatus, Option } from '@prisma/client';
+import { rebookingSaving } from './verdict.js';
 
 export interface CheckOutcome {
   vacationId: string;
   checked: number;
   failed: number;
   drops: Array<{ optionId: string; title: string; from: number; to: number }>;
+  /** A target the reader set has been reached. */
+  targets: Array<{ optionId: string; title: string; to: number; target: number }>;
+  /** Cheaper than what was already paid — money back, while it lasts. */
+  rebookings: Array<{ optionId: string; title: string; from: number; to: number; freeCancellation: boolean }>;
 }
 
 /** The identity a flight is re-found by on the next check. */
@@ -70,7 +75,11 @@ async function record(
   quotes: CompanyQuote[],
   note: string | null,
   facets: Partial<Option> = {},
-): Promise<{ dropped: { from: number; to: number } | null }> {
+): Promise<{
+  dropped: { from: number; to: number } | null;
+  targetReached: { to: number; target: number } | null;
+  rebook: { from: number; to: number; freeCancellation: boolean } | null;
+}> {
   const snapshot = await db.snapshot.create({
     data: {
       optionId: option.id,
@@ -115,7 +124,49 @@ async function record(
   });
 
   const dropped = price !== null && previous !== null && price < previous ? { from: previous, to: price } : null;
-  return { dropped };
+
+  /*
+   * A target counts when it is *crossed*, not whenever the price happens to sit
+   * below it. Otherwise every check for the rest of the trip re-announces the
+   * same good news, and the alert becomes noise the reader mutes.
+   */
+  const targetReached =
+    price !== null && option.targetPrice !== null && price <= option.targetPrice && (previous === null || previous > option.targetPrice)
+      ? { to: price, target: option.targetPrice }
+      : null;
+
+  /*
+   * Rebooking is only reported on a check where the price actually fell. The
+   * opportunity persists after that, and it is visible on screen the whole time,
+   * but buzzing daily about the same saving is how notifications get turned off.
+   *
+   * Free cancellation is what makes a hotel rebooking real: cancel the old
+   * reservation, take the cheaper one, keep the difference. A flight rarely
+   * works that way, so its terms are reported rather than assumed.
+   */
+  const freeCancellation = quotes.some((q) => q.freeCancellation);
+  const saving = dropped === null ? null : rebookingSaving(option.bookedPrice, price, option.kind === 'HOTEL' ? freeCancellation : true);
+  const rebook = saving === null || price === null || option.bookedPrice === null
+    ? null
+    : { from: option.bookedPrice, to: price, freeCancellation };
+
+  return { dropped, targetReached, rebook };
+}
+
+/** Fold one option's findings into the vacation's outcome. */
+function collect(
+  outcome: CheckOutcome,
+  option: Option,
+  recorded: {
+    dropped: { from: number; to: number } | null;
+    targetReached: { to: number; target: number } | null;
+    rebook: { from: number; to: number; freeCancellation: boolean } | null;
+  },
+): void {
+  const { id: optionId, title } = option;
+  if (recorded.dropped) outcome.drops.push({ optionId, title, ...recorded.dropped });
+  if (recorded.targetReached) outcome.targets.push({ optionId, title, ...recorded.targetReached });
+  if (recorded.rebook) outcome.rebookings.push({ optionId, title, ...recorded.rebook });
 }
 
 export async function checkVacation(vacation: VacationWithOptions): Promise<CheckOutcome> {
@@ -126,7 +177,14 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
     adults: vacation.adults,
     childAges: vacation.childAges,
   };
-  const outcome: CheckOutcome = { vacationId: vacation.id, checked: 0, failed: 0, drops: [] };
+  const outcome: CheckOutcome = {
+    vacationId: vacation.id,
+    checked: 0,
+    failed: 0,
+    drops: [],
+    targets: [],
+    rebookings: [],
+  };
   // Shared across the flights page and every hotel, so a long shortlist
   // cannot push the check past the function's time limit.
   const retries = retryBudget();
@@ -200,7 +258,7 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
         continue;
       }
 
-      const { dropped } = await record(option, stay, 'OK', Math.round(found.price), found.currency, [], null, {
+      const recorded = await record(option, stay, 'OK', Math.round(found.price), found.currency, [], null, {
         title: option.matchKey === null ? option.title : `${found.airline} · ${found.departTime ?? ''}`.trim(),
         airline: found.airline,
         departTime: found.departTime,
@@ -209,7 +267,7 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
         stops: found.stops,
         route: found.route,
       });
-      if (dropped) outcome.drops.push({ optionId: option.id, title: option.title, ...dropped });
+      collect(outcome, option, recorded);
     }
   }
 
@@ -250,8 +308,8 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
       }
 
       const cheapest = quotes[0] as CompanyQuote;
-      const { dropped } = await record(option, stay, 'OK', Math.round(cheapest.total), cheapest.currency, quotes, null);
-      if (dropped) outcome.drops.push({ optionId: option.id, title: option.title, ...dropped });
+      const recorded = await record(option, stay, 'OK', Math.round(cheapest.total), cheapest.currency, quotes, null);
+      collect(outcome, option, recorded);
     } catch (error) {
       outcome.failed += 1;
       await record(option, stay, 'FAILED', null, null, [], error instanceof Error ? error.message : 'הבדיקה נכשלה');
