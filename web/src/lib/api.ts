@@ -227,3 +227,55 @@ export function priceIndexLabel(index: PriceIndex): string {
   if (index === 'high') return 'Google: המחירים גבוהים עכשיו';
   return 'Google: המחירים רגילים עכשיו';
 }
+
+/* ── who was cheapest, over time ──────────────────────────────────── */
+
+export interface CompanyRun {
+  company: string;
+  /** Checks in a row where this company was the cheapest. */
+  checks: number;
+  from: Date;
+  to: Date;
+  low: number;
+  high: number;
+}
+
+/**
+ * The booking companies that took turns being cheapest.
+ *
+ * The interesting fact about a hotel is rarely the price alone — it is that
+ * Booking held the best rate for a week and then Agoda undercut it. That
+ * switchover is already recorded, one `cheapestCompany` per snapshot; this reads
+ * it back as runs rather than as a list, because "Booking for 9 checks, then
+ * Agoda" is the sentence a person actually wants.
+ *
+ * Consecutive identical companies collapse into one run. A gap where a check
+ * failed does not break a run: a company did not stop being cheapest because we
+ * could not reach the page.
+ */
+export function companyRuns(option: OptionRow): CompanyRun[] {
+  const runs: CompanyRun[] = [];
+
+  // Oldest first, so a run reads forwards in time.
+  const priced = [...option.snapshots]
+    .reverse()
+    .filter((s) => s.status === 'OK' && s.cheapestCompany !== null && s.price !== null);
+
+  for (const snapshot of priced) {
+    const company = snapshot.cheapestCompany as string;
+    const price = snapshot.price as number;
+    const at = new Date(snapshot.checkedAt);
+    const current = runs[runs.length - 1];
+
+    if (current && current.company === company) {
+      current.checks += 1;
+      current.to = at;
+      current.low = Math.min(current.low, price);
+      current.high = Math.max(current.high, price);
+    } else {
+      runs.push({ company, checks: 1, from: at, to: at, low: price, high: price });
+    }
+  }
+
+  return runs;
+}

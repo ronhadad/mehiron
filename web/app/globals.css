@@ -1041,6 +1041,43 @@ table.log td:nth-child(2) {
   min-width: 160px;
 }
 
+/* ── who was cheapest, over time ────────────────────────────── */
+.runs {
+  padding: 4px 0 16px;
+}
+.runs > .k {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+.runs ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.runs li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.runs .bar {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  flex: none;
+  /* The width is set inline from how many checks the run covers. */
+}
+.runs .detail {
+  color: var(--faint);
+  white-space: nowrap;
+}
+
 /* ── phones ──────────────────────────────────────────────────────
  * The desktop layout puts an icon, a name, a sparkline, a price and
  * two controls on a single line, inside 40px page gutters and 22px
@@ -1095,4 +1132,8 @@ table.log td:nth-child(2) {
   .recs-list li > div:first-child { flex: 1 1 100%; }
   .recs-list .price { text-align: start; }
   .recs-list li > button { margin-inline-start: auto; }
+
+  /* The bar is decorative; on a phone the names and prices need the room. */
+  .runs .bar { display: none; }
+  .runs li { flex-wrap: wrap; gap: 6px; }
 }

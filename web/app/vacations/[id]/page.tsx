@@ -16,6 +16,7 @@ import {
   adultsLabel,
   checkVacation,
   companiesLabel,
+  companyRuns,
   deleteVacation,
   getVacation,
   hebrewDate,
@@ -478,6 +479,7 @@ function OptionRowView({
 
         <BookedPrice option={option} currency={currency} onChanged={onChanged} />
         <PriceChart points={history} currency={currency} target={option.targetPrice} />
+        <CompanyTimeline option={option} currency={currency} />
 
         {option.snapshots.length > 0 && (
           <table className="log">
@@ -593,6 +595,45 @@ function Sparkline({ values, direction }: { values: number[]; direction: 'down' 
     <svg viewBox="0 0 110 34" width={110} height={34} style={{ flex: 'none', transform: 'scaleX(-1)' }} aria-hidden="true">
       <polyline points={points} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/**
+ * Which booking company kept being the cheapest.
+ *
+ * A price alone does not tell you much about a hotel; that Booking held the best
+ * rate for a week and then Agoda undercut it does. That switchover was already
+ * being recorded on every check and never shown.
+ *
+ * Nothing renders for a single run: "Booking has been cheapest every time" is
+ * not a timeline, and drawing one implies a change that never happened.
+ */
+function CompanyTimeline({ option, currency }: { option: OptionRow; currency: string }): React.JSX.Element | null {
+  const runs = companyRuns(option);
+  if (runs.length < 2) return null;
+
+  const total = runs.reduce((sum, r) => sum + r.checks, 0);
+  // Newest first: who is cheapest *now* is the question being asked.
+  const recent = [...runs].reverse();
+
+  return (
+    <div className="runs">
+      <div className="k">מי היה הזול</div>
+      <ul>
+        {recent.map((run, i) => (
+          <li key={`${run.company}-${run.from.toISOString()}`}>
+            <span className={`chip ${i === 0 ? 'best' : ''}`}>{run.company}</span>
+            <span className="bar" style={{ width: `${Math.max(6, (run.checks / total) * 100)}%` }} />
+            <span className="detail num">
+              {run.low === run.high ? money(run.low, currency) : `${money(run.low, currency)}–${money(run.high, currency)}`}
+            </span>
+            <span className="detail">
+              {i === 0 ? 'עכשיו' : hebrewDate(run.to)} · {run.checks === 1 ? 'בדיקה' : `${run.checks} בדיקות`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
