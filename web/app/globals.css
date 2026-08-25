@@ -962,6 +962,64 @@ table.log td:nth-child(2) {
   width: 110px;
 }
 
+/* ── recommended hotels ──────────────────────────────────────── */
+.recs {
+  border-top: 1px solid var(--line-soft);
+}
+.recs-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 22px;
+  flex-wrap: wrap;
+}
+.recs-head .k {
+  font-size: 13px;
+  font-weight: 600;
+}
+.recs-head .range {
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 2px;
+}
+.recs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.recs-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 22px;
+  border-top: 1px solid var(--line-soft);
+}
+.recs-list .name {
+  font-size: 14px;
+  font-weight: 600;
+  /* Resort names run long; one line with an ellipsis beats a three-line row. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recs-list .sub {
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 2px;
+}
+.recs-list .price {
+  text-align: end;
+  flex: none;
+}
+.recs-list .price .v {
+  font-size: 16px;
+  font-weight: 600;
+}
+.recs-list .price .k {
+  font-size: 11px;
+  color: var(--faint);
+}
+
 /* ── phones ──────────────────────────────────────────────────────
  * The desktop layout puts an icon, a name, a sparkline, a price and
  * two controls on a single line, inside 40px page gutters and 22px
@@ -1010,4 +1068,10 @@ table.log td:nth-child(2) {
 
   .history { padding-inline: 15px; }
   .fields { gap: 10px; }
+
+  .recs-head { padding: 12px 15px; }
+  .recs-list li { padding: 11px 15px; gap: 8px 10px; flex-wrap: wrap; }
+  .recs-list li > div:first-child { flex: 1 1 100%; }
+  .recs-list .price { text-align: start; }
+  .recs-list li > button { margin-inline-start: auto; }
 }

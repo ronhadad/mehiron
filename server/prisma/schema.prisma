@@ -60,6 +60,12 @@ model Vacation {
   /// How often to re-check, and whether the scheduler should bother.
   intervalSeconds Int      @default(3600)
   paused          Boolean  @default(false)
+
+  /// Google's own verdict on the fare for this route and these dates, printed
+  /// on the flights page as "מדדי מחירים · המחירים גבוהים עכשיו". It costs
+  /// nothing to keep — it arrives on a page already being fetched — and it is
+  /// the one judgement here that is informed by fares beyond our own history.
+  priceIndex String?
   archived        Boolean  @default(false)
   lastCheckedAt   DateTime?
 
@@ -119,6 +125,13 @@ model Option {
   favorite    Boolean @default(false)
   active      Boolean @default(true)
   targetPrice Int?
+
+  /// What was actually paid, once booked. A drop below this is money back
+  /// rather than a missed opportunity, and it is only actionable while the
+  /// booking can still be cancelled for free — which is why the cancellation
+  /// terms are already kept per company quote.
+  bookedPrice Float?
+  bookedAt    DateTime?
 
   lastCheckedAt DateTime?
   lastStatus    CheckStatus?

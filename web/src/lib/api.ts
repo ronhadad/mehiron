@@ -7,8 +7,11 @@
 import type { VacationWithOptions } from '@server/domain/vacations';
 import type { Place } from '@server/google/places';
 import type { HotelSuggestion } from '@server/google/hotels/suggest';
+import type { Recommendation } from '@server/domain/hotelSearch';
+import type { Assessment } from '@server/domain/verdict';
+import type { PriceIndex } from '@server/google/flights/insight';
 
-export type { HotelSuggestion, Place, VacationWithOptions };
+export type { Assessment, HotelSuggestion, PriceIndex, Place, Recommendation, VacationWithOptions };
 export type OptionRow = VacationWithOptions['options'][number];
 
 async function send<T>(url: string, init?: RequestInit): Promise<T> {
@@ -43,6 +46,15 @@ export const addHotel = (id: string, hotel: unknown): Promise<{ option: OptionRo
 
 export const suggestHotels = (id: string, q: string): Promise<{ hotels: HotelSuggestion[] }> =>
   send(`/api/vacations/${id}/hotels/suggest?q=${encodeURIComponent(q)}`);
+
+export const recommendHotels = (id: string): Promise<{ hotels: Recommendation[]; message?: string }> =>
+  send(`/api/vacations/${id}/hotels/recommend`);
+
+export const watchFlights = (id: string): Promise<{ option: OptionRow }> =>
+  send(`/api/vacations/${id}/flights`, { method: 'POST' });
+
+export const setBooked = (id: string, bookedPrice: number | null): Promise<{ option: OptionRow }> =>
+  send(`/api/options/${id}`, { method: 'PATCH', body: JSON.stringify({ bookedPrice }) });
 
 export const removeOption = (id: string): Promise<{ ok: true }> =>
   send(`/api/options/${id}`, { method: 'DELETE' });
@@ -202,3 +214,16 @@ export const nightsLabel = (n: number): string => count(n, 'לילה אחד', '�
 export const hotelsLabel = (n: number): string => count(n, 'מלון אחד', 'שני מלונות', 'מלונות');
 export const companiesLabel = (n: number): string => count(n, 'חברה אחת', 'שתי חברות', 'חברות');
 export const adultsLabel = (n: number): string => count(n, 'מבוגר אחד', 'שני מבוגרים', 'מבוגרים');
+
+/**
+ * How to say Google's price index on screen.
+ *
+ * Defined here rather than imported from the parser: the parser module pulls in
+ * the HTML scrubbing helpers, and none of that belongs in a browser bundle for
+ * the sake of three strings.
+ */
+export function priceIndexLabel(index: PriceIndex): string {
+  if (index === 'low') return 'Google: המחירים נמוכים עכשיו';
+  if (index === 'high') return 'Google: המחירים גבוהים עכשיו';
+  return 'Google: המחירים רגילים עכשיו';
+}

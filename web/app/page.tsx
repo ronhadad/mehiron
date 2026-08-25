@@ -183,14 +183,23 @@ function VacationCard({ vacation }: { vacation: VacationWithOptions }): React.JS
               {hebrewDate(vacation.checkin)} – {hebrewDate(vacation.checkout)}
             </div>
           </div>
-          <span className="badge">{vacation.originAirport} → {vacation.destinationLabel}</span>
+          <span className="badge">
+            {cheapestFlight ? `${vacation.originAirport} → ${vacation.destinationLabel}` : vacation.destinationLabel}
+          </span>
         </div>
 
         <div className="tiles">
-          <div className="tile">
-            <div className="k">טיסה</div>
-            <div className="v num">{money(cheapestFlight?.lastPrice ?? null, vacation.currency)}</div>
-          </div>
+          {cheapestFlight ? (
+            <div className="tile">
+              <div className="k">טיסה</div>
+              <div className="v num">{money(cheapestFlight.lastPrice, vacation.currency)}</div>
+            </div>
+          ) : (
+            <div className="tile">
+              <div className="k">טיסה</div>
+              <div className="v" style={{ fontSize: 14, color: 'var(--faint)' }}>לא במעקב</div>
+            </div>
+          )}
           <div className="tile">
             <div className="k">מלון</div>
             <div className="v num">{money(cheapestHotel?.lastPrice ?? null, vacation.currency)}</div>
@@ -234,6 +243,7 @@ function NewVacation({ onCreated }: { onCreated: () => void }): React.JSX.Elemen
   const [suggestions, setSuggestions] = useState<Place[]>([]);
   const [name, setName] = useState('');
   const [origin, setOrigin] = useState('TLV');
+  const [trackFlights, setTrackFlights] = useState(true);
   const [checkin, setCheckin] = useState(inDays(30));
   const [checkout, setCheckout] = useState(inDays(37));
   const [adults, setAdults] = useState(2);
@@ -275,6 +285,7 @@ function NewVacation({ onCreated }: { onCreated: () => void }): React.JSX.Elemen
         latitude: place.latitude ?? null,
         longitude: place.longitude ?? null,
         originAirport: origin.trim().toUpperCase() || 'TLV',
+        trackFlights,
         checkin,
         checkout,
         adults,
@@ -286,7 +297,7 @@ function NewVacation({ onCreated }: { onCreated: () => void }): React.JSX.Elemen
     } finally {
       setBusy(false);
     }
-  }, [place, name, origin, checkin, checkout, adults, childAges, onCreated]);
+  }, [place, name, origin, trackFlights, checkin, checkout, adults, childAges, onCreated]);
 
   return (
     <div className="panel" style={{ marginBottom: 24 }}>
@@ -337,10 +348,12 @@ function NewVacation({ onCreated }: { onCreated: () => void }): React.JSX.Elemen
             )}
           </label>
 
-          <label className="f">
-            <span className="k">משדה</span>
-            <input className="input" value={origin} onChange={(e) => setOrigin(e.target.value)} />
-          </label>
+          {trackFlights && (
+            <label className="f">
+              <span className="k">משדה</span>
+              <input className="input" value={origin} onChange={(e) => setOrigin(e.target.value)} />
+            </label>
+          )}
 
           <label className="f">
             <span className="k">צ׳ק-אין</span>
@@ -368,6 +381,18 @@ function NewVacation({ onCreated }: { onCreated: () => void }): React.JSX.Elemen
             <span className="k">שם החופשה</span>
             <input className="input" placeholder={place?.label ?? 'רודוס בספטמבר'} value={name} onChange={(e) => setName(e.target.value)} />
           </label>
+
+          <div className="f">
+            <span className="k">מה לעקוב</span>
+            <button
+              type="button"
+              className="fchip"
+              aria-pressed={trackFlights}
+              onClick={() => setTrackFlights((v) => !v)}
+            >
+              {trackFlights ? '✓ טיסות' : 'בלי טיסות'}
+            </button>
+          </div>
 
           <button className="btn" onClick={() => void submit()} disabled={busy || !place?.mid}>
             {busy ? 'שומרים…' : 'שמירת חופשה'}

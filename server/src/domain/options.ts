@@ -98,14 +98,53 @@ export async function setTarget(optionId: string, targetPrice: number | null): P
 /**
  * Stop watching something.
  *
- * The cheapest-flight option cannot be removed — a vacation without it tracks
- * nothing — so it is refused rather than silently ignored.
+ * This used to refuse to remove the cheapest-flight option, on the grounds that
+ * a vacation without it tracks nothing. That was wrong: a trip that is driven to
+ * has no flight to track, and the option only made every check spend a Google
+ * request to record a failure. A vacation watching nothing is simply idle — the
+ * scheduler already skips it — and flights can be added back.
  */
 export async function removeOption(optionId: string): Promise<void> {
   const option = await db.option.findUnique({ where: { id: optionId } });
   if (!option) return;
-  if (option.kind === 'FLIGHT' && option.matchKey === null) {
-    throw new Error('אי אפשר להסיר את מעקב הטיסה הזולה — הוא הבסיס של החופשה');
-  }
   await db.option.delete({ where: { id: optionId } });
+}
+
+/**
+ * Start watching the cheapest fare for this vacation's dates.
+ *
+ * Idempotent by the same unique index that stops a hotel being added twice: the
+ * cheapest-flight option is the one with a null match key, so asking for it
+ * again revives it rather than creating a second.
+ */
+export async function watchCheapestFlight(vacationId: string): Promise<Option> {
+  /*
+   * Not an upsert. The cheapest-flight option is identified by a *null* match
+   * key, and a compound unique lookup cannot take null — in SQL nothing equals
+   * null, so the index does not constrain these rows either. Find, then create.
+   */
+  const existing = await db.option.findFirst({
+    where: { vacationId, kind: 'FLIGHT', matchKey: null },
+  });
+
+  if (existing) {
+    return db.option.update({ where: { id: existing.id }, data: { active: true } });
+  }
+
+  return db.option.create({
+    data: {
+      vacationId,
+      kind: 'FLIGHT',
+      title: 'הטיסה הזולה בתאריכים האלה',
+      matchKey: null,
+    },
+  });
+}
+
+/** Record what was actually paid, so a later drop reads as money back. */
+export async function setBooked(optionId: string, bookedPrice: number | null): Promise<Option> {
+  return db.option.update({
+    where: { id: optionId },
+    data: { bookedPrice, bookedAt: bookedPrice === null ? null : new Date() },
+  });
 }

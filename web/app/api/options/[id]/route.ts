@@ -1,6 +1,6 @@
-/** Favourite, target price, or stop watching. */
+/** Favourite, target price, what was actually paid, or stop watching. */
 import { NextResponse } from 'next/server';
-import { removeOption, setFavorite, setTarget } from '@server/domain/options.js';
+import { removeOption, setBooked, setFavorite, setTarget } from '@server/domain/options.js';
 
 /*
  * Next's generated route validator hands the context in as `params:
@@ -14,11 +14,12 @@ export const dynamic = 'force-dynamic';
 
 export async function PATCH(request: Request, ctx: RouteContext): Promise<NextResponse> {
   const { id } = (await ctx.params) as { id: string };
-  const body = (await request.json().catch(() => ({}))) as { favorite?: boolean; targetPrice?: number | null };
+  const body = (await request.json().catch(() => ({}))) as { favorite?: boolean; targetPrice?: number | null; bookedPrice?: number | null };
 
   try {
     if (typeof body.favorite === 'boolean') return NextResponse.json({ option: await setFavorite(id, body.favorite) });
     if (body.targetPrice !== undefined) return NextResponse.json({ option: await setTarget(id, body.targetPrice) });
+    if (body.bookedPrice !== undefined) return NextResponse.json({ option: await setBooked(id, body.bookedPrice) });
     return NextResponse.json({ message: 'אין מה לעדכן' }, { status: 400 });
   } catch (error) {
     return NextResponse.json({ message: error instanceof Error ? error.message : 'העדכון נכשל' }, { status: 400 });

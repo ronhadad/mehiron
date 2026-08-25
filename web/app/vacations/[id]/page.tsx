@@ -27,6 +27,8 @@ import {
   nightsBetween,
   nightsLabel,
   plot,
+  priceIndexLabel,
+  recommendHotels,
   removeOption,
   seriesOf,
   setFavorite,
@@ -37,7 +39,9 @@ import {
   type Point,
   type VacationWithOptions,
   updateVacation,
+  watchFlights,
 } from '@/lib/api';
+import type { PriceIndex, Recommendation } from '@/lib/api';
 
 export default function VacationPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
@@ -232,13 +236,36 @@ export default function VacationPage(): React.JSX.Element {
               <span className="count">{flights.length} במעקב</span>
               <div className="spacer" />
               {cheapestFlight?.route && <span className="chip info">{cheapestFlight.route}</span>}
+              {vacation.priceIndex && (
+                <span
+                  className={`chip ${vacation.priceIndex === 'low' ? 'down' : vacation.priceIndex === 'high' ? 'up' : ''}`}
+                  title="השיפוט של Google על המסלול הזה, לא שלנו — הוא מכיר מחירים שאנחנו לא ראינו"
+                >
+                  {priceIndexLabel(vacation.priceIndex as PriceIndex)}
+                </span>
+              )}
             </div>
             {flights.map((o) => (
               <OptionRowView key={o.id} option={o} currency={vacation.currency} onChanged={load} />
             ))}
-            <p className="note">
-              מעקב הטיסה הזולה תמיד קיים, גם בלי לבחור טיסה מסוימת — כך טיסה שתופיע מחר לא תתפספס.
-            </p>
+            {flights.length > 0 ? (
+              <p className="note">
+                מעקב הטיסה הזולה עוקב אחרי מה שזול בתאריכים האלה, גם בלי לבחור טיסה מסוימת — כך טיסה שתופיע
+                מחר לא תתפספס.
+              </p>
+            ) : (
+              <div className="note" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ flex: 1, minWidth: 180 }}>
+                  החופשה הזאת לא עוקבת אחרי טיסות. אם נוסעים ברכב אין מה לעקוב — ואם כן, אפשר להוסיף.
+                </span>
+                <button
+                  className="ghost"
+                  onClick={() => void watchFlights(id).then(load)}
+                >
+                  מעקב אחרי הטיסה הזולה
+                </button>
+              </div>
+            )}
           </section>
 
           <section className="panel">
@@ -259,6 +286,7 @@ export default function VacationPage(): React.JSX.Element {
                 ולנוסעים של החופשה הזאת.
               </p>
             )}
+            <Recommendations vacationId={id} currency={vacation.currency} nights={nights} onAdded={load} />
             <AddHotel vacationId={id} onAdded={load} />
           </section>
         </div>
@@ -542,6 +570,118 @@ function Sparkline({ values, direction }: { values: number[]; direction: 'down' 
     <svg viewBox="0 0 110 34" width={110} height={34} style={{ flex: 'none', transform: 'scaleX(-1)' }} aria-hidden="true">
       <polyline points={points} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/**
+ * Hotels worth considering here, fetched from Google on request.
+ *
+ * On request rather than on page load: it is a 2.5 MB page fetch, and a panel
+ * that spends one every time someone opens a vacation would be both slow and a
+ * good way to get throttled. The button says what it will do.
+ *
+ * The prices need care. A destination search lists the *nightly* rate — checked
+ * against one hotel's own page, where ₪311 a night matched its ₪2,176 total for
+ * seven nights exactly — while what this app tracks is the stay total. Showing
+ * the nightly figure alone would understate a week sevenfold, so both appear and
+ * both are labelled.
+ */
+function Recommendations({
+  vacationId,
+  currency,
+  nights,
+  onAdded,
+}: {
+  vacationId: string;
+  currency: string;
+  nights: number;
+  onAdded: () => void;
+}): React.JSX.Element {
+  const [hotels, setHotels] = useState<Recommendation[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const { hotels: found, message } = await recommendHotels(vacationId);
+      setHotels(found);
+      // Google returning a shell is common enough that "none found" needs to be
+      // distinguishable from "we could not read the page".
+      if (found.length === 0) setNote(message ?? 'Google לא החזירה מלונות בבדיקה הזאת — כדאי לנסות שוב');
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : 'החיפוש נכשל');
+    } finally {
+      setBusy(false);
+    }
+  }, [vacationId]);
+
+  const add = useCallback(
+    async (hotel: Recommendation) => {
+      setAdding(hotel.entityId);
+      try {
+        await addHotel(vacationId, {
+          entityId: hotel.entityId,
+          title: hotel.name,
+          stars: hotel.stars,
+          rating: hotel.rating,
+          ratingCount: hotel.ratingCount,
+        });
+        // Drop it from the list: it is being watched now, so it is no longer a
+        // suggestion.
+        setHotels((current) => current?.filter((h) => h.entityId !== hotel.entityId) ?? null);
+        onAdded();
+      } catch (e) {
+        setNote(e instanceof Error ? e.message : 'ההוספה נכשלה');
+      } finally {
+        setAdding(null);
+      }
+    },
+    [vacationId, onAdded],
+  );
+
+  return (
+    <div className="recs">
+      <div className="recs-head">
+        <div>
+          <div className="k">מלונות מומלצים ביעד</div>
+          <div className="range">Google, במחירים לתאריכים של החופשה הזאת</div>
+        </div>
+        <div className="spacer" />
+        <button className="ghost" onClick={() => void load()} disabled={busy}>
+          {busy ? 'מחפשים…' : hotels ? 'רענון' : 'חיפוש מלונות'}
+        </button>
+      </div>
+
+      {hotels && hotels.length > 0 && (
+        <ul className="recs-list">
+          {hotels.map((h) => (
+            <li key={h.entityId}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="name">{h.name}</div>
+                <div className="sub">
+                  {h.stars !== null && `${h.stars} כוכבים · `}
+                  {h.rating !== null && `${h.rating}/5${h.ratingCount ? ` (${h.ratingCount})` : ''} · `}
+                  {h.distance ?? ''}
+                  {h.price !== null && `${money(h.price, h.currency ?? currency)} ללילה`}
+                </div>
+              </div>
+              <div className="price">
+                <div className="v num">{money(h.stayTotal, h.currency ?? currency)}</div>
+                <div className="k">{nightsLabel(nights)}</div>
+              </div>
+              <button className="ghost" onClick={() => void add(h)} disabled={adding === h.entityId}>
+                {adding === h.entityId ? 'מוסיפים…' : 'מעקב'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {note && <p className="note" style={{ border: 0 }}>{note}</p>}
+    </div>
   );
 }
 

@@ -18,6 +18,7 @@ import { flightSearchUrl, passengersFor, roundTrip } from '../google/flights/url
 import { parseCompanyQuotes, type CompanyQuote } from '../google/hotels/parse.js';
 import { hotelEntityUrl, hotelSearchUrl } from '../google/hotels/url.js';
 import { readRendered, retryBudget, shellNote } from '../google/rendered.js';
+import { parsePriceIndex, type PriceIndex } from '../google/flights/insight.js';
 import type { CheckStatus, Option } from '@prisma/client';
 
 export interface CheckOutcome {
@@ -129,6 +130,7 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
   // Shared across the flights page and every hotel, so a long shortlist
   // cannot push the check past the function's time limit.
   const retries = retryBudget();
+  let priceIndex: PriceIndex | null = null;
 
   const flightOptions = vacation.options.filter((o) => o.kind === 'FLIGHT' && o.active);
   const hotelOptions = vacation.options.filter((o) => o.kind === 'HOTEL' && o.active);
@@ -161,6 +163,9 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
         async () => {
           const { html } = await fetchGooglePage(url);
           sawEmptyMessage = /לא נמצאו טיסות|no flights found|אין טיסות/i.test(html);
+          // Free: Google's own low/typical/high verdict for this route is on the
+          // page we are already fetching for the fares.
+          priceIndex = parsePriceIndex(html) ?? priceIndex;
           return html;
         },
         (html) => parseItineraries(html).filter((i) => keepFlight(i, vacation.maxStops)),
@@ -253,6 +258,11 @@ export async function checkVacation(vacation: VacationWithOptions): Promise<Chec
     }
   }
 
-  await db.vacation.update({ where: { id: vacation.id }, data: { lastCheckedAt: new Date() } });
+  await db.vacation.update({
+    where: { id: vacation.id },
+    // Only overwrite the index when this check actually saw one; a shell has
+    // no verdict on it, and blanking the last known one loses information.
+    data: { lastCheckedAt: new Date(), ...(priceIndex === null ? {} : { priceIndex }) },
+  });
   return outcome;
 }

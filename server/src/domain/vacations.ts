@@ -21,6 +21,12 @@ export interface NewVacation {
   childAges?: number[];
   currency?: string;
   intervalSeconds?: number;
+  /**
+   * Whether to watch flights at all. A vacation is not always a flight — a
+   * weekend in Eilat is driven to, and forcing a flight option onto it means
+   * every check spends a Google request producing a failure.
+   */
+  trackFlights?: boolean;
   maxStops?: number | null;
   freeCancellationOnly?: boolean;
   minRating?: number | null;
@@ -29,9 +35,13 @@ export interface NewVacation {
 }
 
 /**
- * Create the group, then attach the one option every vacation has: "the
- * cheapest fare for these dates". It is created up front because a vacation
- * without it would silently track nothing until a flight was pinned by hand.
+ * Create the group, and unless told otherwise attach "the cheapest fare for
+ * these dates".
+ *
+ * It is attached up front because a vacation that tracks nothing is a puzzle
+ * for whoever made it. But not every trip is flown to, and a flight option on a
+ * drive-there weekend just spends a Google request per check to record a
+ * failure — so `trackFlights: false` leaves it off, and it can be added later.
  */
 export async function createVacation(input: NewVacation): Promise<Vacation> {
   const photo = await destinationPhoto(input.destinationLabel).catch(() => null);
@@ -59,13 +69,17 @@ export async function createVacation(input: NewVacation): Promise<Vacation> {
       imageUrl: photo?.url ?? null,
       imageAttribution: photo?.title ?? null,
       imageProvider: photo?.provider ?? null,
-      options: {
-        create: {
-          kind: 'FLIGHT',
-          title: 'הטיסה הזולה בתאריכים האלה',
-          matchKey: null,
-        },
-      },
+      ...(input.trackFlights === false
+        ? {}
+        : {
+            options: {
+              create: {
+                kind: 'FLIGHT',
+                title: 'הטיסה הזולה בתאריכים האלה',
+                matchKey: null,
+              },
+            },
+          }),
     },
   });
 
