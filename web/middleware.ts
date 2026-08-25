@@ -15,9 +15,11 @@ import { SESSION_COOKIE, authConfig, sessionIsValid } from '@server/domain/sessi
  * /api/auth covers the Google routes beneath it. /api/cron is open to the
  * middleware but not to the internet: a scheduler has no cookie to present, so
  * that route authenticates itself against CRON_SECRET and refuses to run when
- * the variable is unset.
+ * the variable is unset. /sw.js is the service worker: a redirect to /login
+ * would answer it with HTML, and the browser refuses to register a worker
+ * served with the wrong content type — it holds no data of its own.
  */
-const OPEN = ['/login', '/api/auth', '/api/cron'];
+const OPEN = ['/login', '/api/auth', '/api/cron', '/sw.js'];
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;

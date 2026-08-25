@@ -25,6 +25,7 @@ import {
   type Place,
   type VacationWithOptions,
 } from '@/lib/api';
+import { disablePush, enablePush, pushState, type PushState } from '@/lib/push';
 
 export default function Home(): React.JSX.Element {
   const [vacations, setVacations] = useState<VacationWithOptions[] | null>(null);
@@ -61,6 +62,7 @@ export default function Home(): React.JSX.Element {
         <button className="btn" onClick={() => setCreating((v) => !v)}>
           {creating ? 'סגירה' : 'חופשה חדשה'}
         </button>
+        <NotifyBell />
         <button
           className="link"
           onClick={() => {
@@ -233,6 +235,67 @@ function VacationCard({ vacation }: { vacation: VacationWithOptions }): React.JS
         </div>
       </div>
     </Link>
+  );
+}
+
+/**
+ * The bell: agree, once, to be told when a price falls.
+ *
+ * Its own component because the state is genuinely four-valued — unsupported,
+ * refused, off, on — and collapsing that into a checkbox produces a control that
+ * lies. A browser that has refused permission cannot be talked into it by
+ * clicking again, and saying so is more use than a button that does nothing.
+ */
+function NotifyBell(): React.JSX.Element | null {
+  const [state, setState] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void pushState().then(setState);
+  }, []);
+
+  const toggle = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (state === 'on') {
+        await disablePush();
+        setState('off');
+      } else {
+        await enablePush();
+        setState('on');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'לא הצלחנו להפעיל התראות');
+      setState(await pushState());
+    } finally {
+      setBusy(false);
+    }
+  }, [state]);
+
+  if (state === null || state === 'unsupported') return null;
+
+  if (state === 'denied') {
+    return (
+      <span className="chip warn" title="ההרשאה נדחתה בדפדפן — צריך לאפשר אותה בהגדרות האתר">
+        התראות חסומות
+      </span>
+    );
+  }
+
+  return (
+    <>
+      <button
+        className="link"
+        onClick={() => void toggle()}
+        disabled={busy}
+        title={state === 'on' ? 'כיבוי התראות על ירידות מחיר' : 'התראה לנייד כשמחיר יורד'}
+      >
+        {busy ? '…' : state === 'on' ? '🔔 התראות פעילות' : '🔕 הפעלת התראות'}
+      </button>
+      {error && <span className="chip warn">{error}</span>}
+    </>
   );
 }
 

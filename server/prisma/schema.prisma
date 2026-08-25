@@ -191,3 +191,23 @@ model Quote {
   @@index([snapshotId])
   @@index([company])
 }
+
+/// A browser that agreed to be told when a price falls.
+///
+/// One row per browser, not per person: agreeing on a phone says nothing about
+/// the laptop, and each has its own endpoint and its own keys. Push endpoints
+/// die silently — a reinstalled browser, revoked permission, an expired
+/// subscription — so the sender prunes on the 404 and 410 the push service
+/// returns, which is the only reliable signal that one is gone.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  lastSentAt DateTime?
+  /// Consecutive send failures that were not a hard 404/410, so a transient
+  /// outage does not delete a good subscription.
+  failures  Int      @default(0)
+}

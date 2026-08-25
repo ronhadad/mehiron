@@ -15,6 +15,7 @@
 import { db } from './db.js';
 import { checkVacation, type CheckOutcome } from './check.js';
 import { listVacations, type VacationWithOptions } from './vacations.js';
+import { notifyDrops, type Drop } from './notify.js';
 
 /** The minimum a vacation needs for the question "is it due?" to be answerable. */
 export interface Schedulable {
@@ -80,7 +81,9 @@ export interface Sweep {
   /** Due but not reached before the budget ran out — named, so it is not silent. */
   deferred: Array<{ vacationId: string; name: string }>;
   /** Price falls found anywhere in the sweep, the reason to read the result. */
-  drops: Array<{ vacationId: string; optionId: string; title: string; from: number; to: number }>;
+  drops: Drop[];
+  /** Browsers reached, and dead subscriptions removed. */
+  notified: { sent: number; pruned: number };
 }
 
 export interface SweepOptions {
@@ -126,6 +129,7 @@ export async function runDueChecks(options: SweepOptions = {}): Promise<Sweep> {
     ran: [],
     deferred: [],
     drops: [],
+    notified: { sent: 0, pruned: 0 },
   };
 
   for (const vacation of due) {
@@ -144,7 +148,14 @@ export async function runDueChecks(options: SweepOptions = {}): Promise<Sweep> {
         error: null,
         tookMs: Date.now() - one,
       });
-      for (const drop of outcome.drops) sweep.drops.push({ vacationId: vacation.id, ...drop });
+      for (const drop of outcome.drops) {
+        sweep.drops.push({
+          vacationId: vacation.id,
+          vacationName: vacation.name,
+          currency: vacation.currency,
+          ...drop,
+        });
+      }
     } catch (error) {
       /*
        * The stamp matters on failure too. Without it a vacation that throws
@@ -164,6 +175,18 @@ export async function runDueChecks(options: SweepOptions = {}): Promise<Sweep> {
         tookMs: Date.now() - one,
       });
     }
+  }
+
+  /*
+   * One notification for the whole sweep, sent after everything is priced.
+   * Notifying per vacation would buzz three times for one useful event, which
+   * is how someone learns to swipe these away unread.
+   *
+   * A delivery failure must not fail the sweep: the prices are already written
+   * down, and losing them over an unreachable phone would be the wrong trade.
+   */
+  if (sweep.drops.length > 0) {
+    sweep.notified = await notifyDrops(sweep.drops).catch(() => ({ sent: 0, pruned: 0 }));
   }
 
   sweep.tookMs = Date.now() - began;
