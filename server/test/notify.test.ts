@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { composeMessage, isGone, type Alert } from '../src/domain/notify.js';
+import { composeMessage, isGone, worthInterrupting, type Alert } from '../src/domain/notify.js';
 
 const drop = (over: Partial<Alert> = {}): Alert => ({
   kind: 'drop',
@@ -99,5 +99,39 @@ describe('which alert leads the notification', () => {
     // saying nothing.
     const paid = composeMessage([drop({ kind: 'rebook', from: 4000, to: 3500, freeCancellation: false })]);
     assert.match(paid!.body, /תנאי הכרטיס/);
+  });
+});
+
+describe('what is worth interrupting someone for', () => {
+  /*
+   * The bug this pins actually shipped: the first live push this feature sent
+   * was a ₪7 fall on a ₪2,500 stay. Rebookings were gated at ₪20 and plain
+   * drops were not gated at all.
+   */
+  it('does not buzz for a rounding error on a large stay', () => {
+    assert.equal(worthInterrupting(drop({ from: 2500, to: 2493 })), false);
+  });
+
+  it('buzzes for a real fall', () => {
+    assert.equal(worthInterrupting(drop({ from: 4248, to: 3566 })), true);
+  });
+
+  it('scales the floor, because a flat one is wrong at both ends', () => {
+    // ₪30 off a ₪500 flight is worth knowing…
+    assert.equal(worthInterrupting(drop({ from: 530, to: 500 })), true);
+    // …and ₪30 off a ₪12,000 fortnight is not.
+    assert.equal(worthInterrupting(drop({ from: 12_030, to: 12_000 })), false);
+  });
+
+  it('never suppresses a target or a rebooking', () => {
+    // A target is a number the reader chose; reaching it is the event whatever
+    // its size. A rebooking has its own minimum and a deadline attached.
+    assert.equal(worthInterrupting(drop({ kind: 'target', from: 2000, to: 1999, target: 2000 })), true);
+    assert.equal(worthInterrupting(drop({ kind: 'rebook', from: 2030, to: 2000 })), true);
+  });
+
+  it('sends nothing at all when every drop is noise', () => {
+    // composeMessage receives an empty list once the filter has run.
+    assert.equal(composeMessage([drop({ from: 2500, to: 2497 })].filter(worthInterrupting)), null);
   });
 });

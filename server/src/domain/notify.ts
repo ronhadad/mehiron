@@ -97,6 +97,29 @@ function detailOf(alert: Alert): string {
   return `${alert.vacationName}: ${shekels(alert.from)} → ${shekels(alert.to)}`;
 }
 
+/**
+ * Is this worth someone's attention, as opposed to worth recording?
+ *
+ * These are different questions, and conflating them is how a tracker becomes an
+ * app with notifications switched off. The first live push this feature ever
+ * sent was for a ₪7 fall on a ₪2,500 stay — 0.3%, and a buzz on a phone for it.
+ * Every drop still lands in the history and on the screen; only some are worth
+ * interrupting a day for.
+ *
+ * The floor scales, because a fixed one is wrong at both ends: ₪25 off a ₪500
+ * flight is worth knowing, and ₪25 off a ₪12,000 fortnight is rounding. So a
+ * drop must clear both a flat minimum and one percent of the price.
+ *
+ * Targets and rebookings are exempt. A target is a number the reader chose, and
+ * reaching it is the event whatever its size; a rebooking is already held to its
+ * own minimum and comes with a deadline.
+ */
+export function worthInterrupting(alert: Alert): boolean {
+  if (alert.kind !== 'drop') return true;
+  const saving = alert.from - alert.to;
+  return saving >= 25 && saving >= alert.to * 0.01;
+}
+
 export function composeMessage(alerts: readonly Alert[]): { title: string; body: string; url: string } | null {
   if (alerts.length === 0) return null;
 
@@ -134,7 +157,9 @@ export function isGone(statusCode: number): boolean {
  * throwing here would turn a delivery problem into a lost price.
  */
 export async function notifyDrops(alerts: readonly Alert[]): Promise<{ sent: number; pruned: number }> {
-  const message = composeMessage(alerts);
+  // Filtered here rather than at the call site, so no caller can accidentally
+  // send a buzz about seven shekels.
+  const message = composeMessage(alerts.filter(worthInterrupting));
   const config = pushConfig();
   if (!message || !config) return { sent: 0, pruned: 0 };
 
